@@ -11,6 +11,7 @@ export default defineConfig({
       '/api': BRAIN,
       '/health': BRAIN,
       '/preview': BRAIN,
+      '/handoff': BRAIN,
     },
   },
 });
