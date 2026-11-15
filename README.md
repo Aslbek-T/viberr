@@ -38,6 +38,14 @@ Optional: copy `.env.example` to `.env` and add a free `GEMINI_API_KEY` from
 https://aistudio.google.com/apikey. With the key, Gemini writes the explanations for your specific app.
 Without it, Vibeerr uses built-in sentences and still works. The terminal prints which one is active.
 
+Optional voice: add `ELEVENLABS_API_KEY` (from https://elevenlabs.io/app/settings/api-keys) to `.env` and the
+guide reads every step aloud in a natural voice. Questions from the builder are read out too, and you can answer
+them by voice: press **Answer by voice** and say "yes" or "not yet". After you use the microphone once, Vibeerr
+listens by itself after each question. A spoken answer only sends the suggested choice; anything else, like
+allowing a step that is hard to undo, still needs a press. There is also a **Speak** button to dictate an idea or a
+note. Without the key, the browser's own voice and speech recognition are used (best in Chrome or Edge). Turn the
+voice off with **Voice on/off** at the top.
+
 For development with hot reload: `npm run dev`, then open http://localhost:5173.
 
 ## How it works

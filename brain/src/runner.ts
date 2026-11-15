@@ -7,7 +7,7 @@ import type { AgentId } from '../../shared/story.ts';
 import { resolveAgent } from './agents.ts';
 import { codexArgs, parseCodexLine } from './codex.ts';
 import { ensureGuide, planMarkdown, writeBrief } from './brief.ts';
-import { CLAUDE_MODEL, PORT, ROOT } from './config.ts';
+import { CLAUDE_MODEL, PORT, PROJECTS_DIR, ROOT } from './config.ts';
 import { isInstall, RISKY_CMD, TEST_CMD, type Raw } from './stages.ts';
 import { story } from './story.ts';
 import { translateFinish, translatePlan } from './translator.ts';
@@ -159,10 +159,13 @@ class Runner {
   }
 
   stop() {
-    if (!this.run?.child || !story.state.running) return;
+    if (!this.run || !story.state.running) return;
     this.run.stopped = true;
     this.switching = null;
-    this.run.child.kill('SIGTERM');
+    // Cursor and Codex have already exited while their plan waits on screen, so closing the question is what stops them.
+    story.cancelAsk();
+    const child = this.run.child;
+    if (child && child.exitCode === null && !child.killed) child.kill('SIGTERM');
   }
 
   /** Stops everything and returns the screen to the beginning. */
@@ -389,10 +392,12 @@ class Runner {
   async onHook(body: any): Promise<object> {
     const run = this.run;
     if (process.env.VIBEERR_DEBUG || process.env.BUILDSCAPE_DEBUG) fs.appendFileSync(path.join(ROOT, 'runs', 'hooks-debug.jsonl'), JSON.stringify(body).slice(0, 4000) + '\n');
-    if (!run || !story.state.running || (body.cwd && path.resolve(body.cwd) !== path.resolve(run.dir))) return {};
+    // The builder may `cd` into a subfolder; those steps still belong to this project and still need approval.
+    const inside = (p: string) => { const r = path.relative(run!.dir, path.resolve(p)); return !r.startsWith('..') && !path.isAbsolute(r); };
+    if (!run || !story.state.running || (body.cwd && !inside(body.cwd))) return {};
     const input = body.tool_input ?? {};
     const abs: string | undefined = input.file_path ?? input.path;
-    const file = abs ? path.relative(run.dir, abs) : undefined;
+    const file = abs ? path.relative(run.dir, path.resolve(run.dir, abs)) : undefined;
 
     if (body.hook_event_name === 'PostToolUseFailure') {
       story.raw({ kind: 'problem', command: String(input.command ?? ''), text: String(body.error ?? '').slice(0, 300) });
@@ -448,7 +453,11 @@ class Runner {
 
   private async askPlan(run: Run): Promise<boolean> {
     if (run.planGate) return run.planGate;
-    run.planGate = this.askPlanOnce(run);
+    run.planGate = this.askPlanOnce(run).then((ok) => {
+      // A plan closed without a decision (for example by switching AI) must be asked again, not refused forever.
+      if (!ok && !run.stopped) run.planGate = undefined;
+      return ok;
+    });
     return run.planGate;
   }
 
@@ -505,7 +514,7 @@ export function resolveFolder(input: string | undefined): { ok: true; dir: strin
   if (!raw) return { ok: false, error: 'Add a folder so the builder knows where to put the app.' };
   if (raw.includes('\0')) return { ok: false, error: 'That folder name cannot be used.' };
   const expanded = raw.startsWith('~/') ? path.join(os.homedir(), raw.slice(2)) : raw === '~' ? os.homedir() : raw;
-  const dir = path.isAbsolute(expanded) ? path.resolve(expanded) : path.resolve(os.homedir(), 'Vibeerr', expanded);
+  const dir = path.isAbsolute(expanded) ? path.resolve(expanded) : path.resolve(PROJECTS_DIR, expanded);
   const home = os.homedir();
   if (dir === home || dir === path.parse(dir).root) return { ok: false, error: 'Pick a folder for this one project, not your whole home folder.' };
   if (!dir.startsWith(home + path.sep)) return { ok: false, error: 'Pick a folder inside your home folder.' };

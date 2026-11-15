@@ -11,13 +11,14 @@ import { handleMessage } from './router.ts';
 import { runner } from './runner.ts';
 import { story } from './story.ts';
 import { checkGemini, narratorKind } from './translator.ts';
+import { listen, speak, voiceKind, voiceLine } from './voice.ts';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
 // The brain can start a coding agent, so only pages served from this computer may call it.
 const local = (origin?: string) => !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
-app.use('/api', (req, res, next) => {
+app.use(['/api', '/hook'], (req, res, next) => {
   if (!local(req.headers.origin)) { res.status(403).json({ ok: false, error: 'Only this computer can use Vibeerr.' }); return; }
   next();
 });
@@ -25,7 +26,22 @@ app.use('/api', (req, res, next) => {
 app.get('/health', (_req, res) => res.json({ ok: true, running: story.state.running, narrator: narratorKind() }));
 
 app.get('/api/ready', async (_req, res) => {
-  res.json({ ok: true, folder: PROJECTS_DIR, agents: await listAgents() });
+  res.json({ ok: true, folder: PROJECTS_DIR, agents: await listAgents(), voice: voiceKind() });
+});
+
+// The guide's voice. 204 means "no natural voice right now": the browser then uses its own.
+app.post('/api/speak', async (req, res) => {
+  const text = String(req.body?.text ?? '').trim();
+  if (!text) { res.status(400).end(); return; }
+  const audio = await speak(text);
+  if (!audio) { res.status(204).end(); return; }
+  res.set('Cache-Control', 'no-store').type('audio/mpeg').send(audio);
+});
+// A short spoken answer, recorded in the browser when it cannot listen by itself.
+app.post('/api/listen', express.raw({ type: ['audio/*', 'video/*', 'application/octet-stream'], limit: '4mb' }), async (req, res) => {
+  const audio = Buffer.isBuffer(req.body) ? req.body : Buffer.alloc(0);
+  const text = await listen(audio, String(req.headers['content-type'] ?? 'audio/webm'));
+  res.json(text ? { ok: true, text } : { ok: false, error: 'I did not catch that. Try again, or press a button.' });
 });
 
 // Opens the person's own folders and returns the one they pick. The browser cannot see that path itself.
@@ -145,5 +161,6 @@ wss.on('connection', (ws) => story.addClient(ws));
 server.listen(PORT, HOST, () => {
   console.log(`\n  Vibeerr is running: http://localhost:${PORT}`);
   console.log(`  Projects are built in: ${PROJECTS_DIR}`);
+  console.log(`  Voice: ${voiceLine()}`);
   void checkGemini().then((line) => console.log(`  Guide: ${line}\n`));
 });

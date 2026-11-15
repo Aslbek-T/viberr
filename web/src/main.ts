@@ -1,5 +1,6 @@
-import { AGENTS, STAGES, stageInfo, type AgentId, type Block, type MessageReply, type PlanSection, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
+import { AGENTS, STAGES, stageInfo, type AgentId, type Ask, type Block, type MessageReply, type PlanSection, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
 import { sound } from './audio.ts';
+import { ears, matchAnswer, voice } from './voice.ts';
 import { demo, live, type Feed } from './net.ts';
 import { builder, World } from './world.ts';
 import './styles.css';
@@ -32,6 +33,10 @@ let stageSince = 0;
 let suggestedFolder = '';
 let sideAnswers: { q: string; a: string[] }[] = [];
 
+const MIC = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" fill="currentColor"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+const dictateButton = (target: string) => `<button type="button" class="btn mic-btn" data-dictate="${target}" hidden>${MIC}<span>Speak</span></button>`;
+let micUsed = false;
+
 const wordmark = `<p class="wordmark" aria-label="Vibeerr"><span class="mark" aria-hidden="true">V</span><span aria-hidden="true">Vibeerr</span></p>`;
 const agentOptions = AGENTS.map((agent) => `<option value="${agent.id}">${agent.label}</option>`).join('');
 const agentChoices = AGENTS.map((agent, index) => `<label class="agent-choice">
@@ -53,6 +58,7 @@ $('#app').innerHTML = `
         <div class="chips" aria-label="Examples">${EXAMPLES.map((example) => `<button type="button" class="chip">${esc(example)}</button>`).join('')}</div>
         <div class="start-actions">
           <button id="go" class="btn primary" type="submit">Send</button>
+          ${dictateButton('idea')}
           <button id="demo-btn" class="btn ghost" type="button">Watch a demo build</button>
         </div>
         <p id="start-note" class="note" role="status"></p>
@@ -84,6 +90,7 @@ $('#app').innerHTML = `
     <div id="folder-line" class="folder-line"></div>
     <label class="sr" for="agent-live">Builder</label>
     <select id="agent-live" class="agent-live" aria-label="Which AI is building">${agentOptions}</select>
+    <button id="voice-btn" class="btn small ghost" type="button" aria-pressed="true"></button>
     <button id="sound-btn" class="btn small ghost" type="button"></button>
     <button id="stop-btn" class="btn small ghost" type="button">Stop</button>
     <button id="reset-btn" class="btn small ghost" type="button">Start over</button>
@@ -107,6 +114,7 @@ $('#app').innerHTML = `
     <form id="dock" class="dock">
       <label for="dock-text">Send a note while it works</label>
       <textarea id="dock-text" rows="2" placeholder="For example: use plain labels, or add a graph of the results"></textarea>
+      ${dictateButton('dock-text')}
       <button class="btn" type="submit">Send</button>
     </form>
   </div>
@@ -246,6 +254,8 @@ function renderAsk() {
       ${ask.details?.length ? `<ul class="ask-details">${ask.details.map((detail) => `<li>${esc(detail)}</li>`).join('')}</ul>` : ''}
       <div class="ask-options">${ask.options.map((option, index) => `<button type="button" class="opt ${index === ask.recommended ? 'rec' : ''}" data-opt="${index}">
         <strong>${esc(option.label)}</strong><span>${esc(option.explain)}</span></button>`).join('')}</div>
+      ${ears.ready ? `<div class="ask-voice"><button type="button" class="btn mic-btn" data-mic>${MIC}<span>Answer by voice</span></button>
+        <p class="heard" role="status">${esc(`Or say “${ask.options[0]?.label ?? 'yes'}” or “${ask.options[1]?.label ?? 'no'}”.`)}</p></div>` : ''}
     </div></div>`;
   box.querySelector<HTMLButtonElement>('.opt.rec, .opt')?.focus({ preventScroll: true });
 }
@@ -271,6 +281,8 @@ function renderTop() {
     dockBox.placeholder = 'For example: add a place to write a short note';
   }
   $('#sound-btn').textContent = sound.on ? 'Sound on' : 'Sound off';
+  $('#voice-btn').textContent = voice.on ? 'Voice on' : 'Voice off';
+  $('#voice-btn').setAttribute('aria-pressed', String(voice.on));
   $('#offline').hidden = online || source === 'demo';
 }
 
@@ -373,6 +385,7 @@ async function apply(message: StoryMsg, stale: () => boolean) {
     case 'now':
       view.now = message.text;
       renderNow();
+      void voice.say(message.text);
       await wait(400);
       break;
     case 'block': {
@@ -398,9 +411,10 @@ async function apply(message: StoryMsg, stale: () => boolean) {
       view.ask = message.data;
       sound.ask();
       renderAsk();
+      void speakAsk(message.data);
       break;
     case 'answered':
-      if (view.ask?.id === message.id) view.ask = null;
+      if (view.ask?.id === message.id) { view.ask = null; voice.hush(); ears.stop(); }
       renderAsk();
       break;
     case 'finished':
@@ -411,16 +425,18 @@ async function apply(message: StoryMsg, stale: () => boolean) {
         view.stage = 'done';
         if (!view.visited.includes('done')) view.visited.push('done');
         sound.finish();
+        void voice.say(message.data.summary, true);
         void banner('done');
         shown = 'done';
         picked = null;
         renderAll();
         await world.celebrate();
-      } else renderAll();
+      } else { renderAll(); void voice.say(message.data.summary, true); }
       break;
     case 'problem':
       sound.problem();
       toast(message.text);
+      void voice.say(message.text);
       break;
     case 'guide':
       view.guides = { ...(view.guides ?? {}), [message.stage]: message.text };
@@ -445,6 +461,7 @@ feed = live(
   },
   (up) => {
     online = up;
+    updateMics();
     if (view) renderTop(); else if (source === 'live') showStart();
   },
 );
@@ -512,6 +529,7 @@ $('#idea-form').addEventListener('submit', async (event) => {
   if (out.route === 'answer') {
     sideAnswers.unshift({ q: text, a: out.answer });
     renderChat();
+    void voice.say(out.answer.slice(0, 2).join(' '), true);
     box.value = '';
     grow(box);
   }
@@ -556,6 +574,11 @@ document.querySelectorAll<HTMLButtonElement>('.chip').forEach((chip) => chip.add
 }));
 $('#demo-btn').addEventListener('click', () => { sound.task(); void startDemo(); });
 $('#sound-btn').addEventListener('click', () => { sound.toggle(); renderTop(); });
+$('#voice-btn').addEventListener('click', () => {
+  const nowOn = voice.toggle();
+  renderTop();
+  if (nowOn) void voice.say('Voice is on. I will read each step to you.');
+});
 $('#stop-btn').addEventListener('click', () => void fetch('/api/stop', { method: 'POST' }));
 $('#reset-btn').addEventListener('click', () => void startOver());
 $<HTMLSelectElement>('#agent-live').addEventListener('change', async (event) => {
@@ -580,6 +603,7 @@ $('#stepper').addEventListener('click', (event) => {
 });
 
 $('#ask').addEventListener('click', (event) => {
+  if ((event.target as HTMLElement).closest('[data-mic]')) { void hearAnswer(); return; }
   const add = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-add]');
   if (add) {
     const lines = add.parentElement?.querySelector('.lines');
@@ -620,6 +644,7 @@ $('#dock').addEventListener('submit', async (event) => {
     }
     sideAnswers.unshift({ q: text, a: out.route === 'answer' ? out.answer : ['The builder will read this on the next step.'] });
     renderChat();
+    if (out.route === 'answer') void voice.say(out.answer.slice(0, 2).join(' '), true);
     if (out.route === 'note') toast('Sent. The builder reads it on the next step.');
   }
 });
@@ -635,6 +660,8 @@ async function loadReady() {
   try {
     const data = await (await fetch('/api/ready')).json();
     suggestedFolder = typeof data.folder === 'string' ? data.folder : '';
+    voice.setup(data.voice === 'elevenlabs' ? 'elevenlabs' : 'browser', () => online);
+    updateMics();
     for (const agent of data.agents ?? []) {
       const line = document.querySelector<HTMLElement>(`[data-ready="${agent.id}"]`);
       if (!line) continue;
@@ -648,5 +675,83 @@ async function loadReady() {
   } catch { /* the demo still works offline */ }
 }
 
+// ---------------------------------------------------------------- voice: questions read aloud, answered by speaking
+
+/** Reads a question aloud. After the person has used the microphone once, it listens for the answer by itself. */
+async function speakAsk(ask: Ask) {
+  const labels = ask.options.map((option) => option.label);
+  const lines = [ask.question, ask.summary ?? '', ...(ask.editable ? [] : (ask.details ?? []).slice(0, 1)),
+    labels.length >= 2 ? `Say "${labels[0]}" or "${labels[1]}", or press a button.` : ''];
+  await voice.say(lines.filter(Boolean).join(' '), true);
+  if (micUsed && voice.on && ears.ready && !ears.busy && view?.ask?.id === ask.id) void hearAnswer();
+}
+
+/** Listens for "yes" or "no". The suggested choice is sent at once; any other choice must be confirmed with a press. */
+async function hearAnswer() {
+  const ask = view?.ask;
+  const box = $('#ask');
+  const mic = box.querySelector<HTMLButtonElement>('[data-mic]');
+  const heardLine = box.querySelector<HTMLElement>('.heard');
+  if (!ask || !mic || !heardLine) return;
+  if (ears.busy) { ears.stop(); return; }
+  micUsed = true;
+  const labels = ask.options.map((option) => option.label);
+  mic.classList.add('on');
+  mic.querySelector('span')!.textContent = 'Listening… press to stop';
+  heardLine.textContent = 'Listening…';
+  const heard = await ears.listen();
+  if (view?.ask?.id !== ask.id) return;
+  mic.classList.remove('on');
+  mic.querySelector('span')!.textContent = 'Answer by voice';
+  if (!heard) { heardLine.textContent = 'I did not catch that. Press the microphone and try again, or press a button.'; return; }
+  const choice = matchAnswer(heard, labels);
+  if (choice === null) {
+    heardLine.textContent = `I heard “${heard}”. Say “${labels[0]}” or “${labels[1]}”.`;
+    void voice.say(`Sorry, I did not understand. Say ${labels[0]}, or ${labels[1]}.`, true);
+    return;
+  }
+  const button = box.querySelector<HTMLButtonElement>(`.opt[data-opt="${choice}"]`);
+  if (!button) return;
+  if (choice === (ask.recommended ?? 0)) {
+    heardLine.textContent = `I heard “${heard}”.`;
+    button.click();
+    return;
+  }
+  // Not the suggested choice (for example allowing something hard to undo): a spoken word alone is not enough.
+  box.querySelectorAll('.opt.picked').forEach((el) => el.classList.remove('picked'));
+  button.classList.add('picked');
+  button.focus();
+  heardLine.textContent = `I heard “${heard}”. Press “${labels[choice]}” to confirm.`;
+  void voice.say(`To be safe, press ${labels[choice]} to confirm.`, true);
+}
+
+function updateMics() {
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-dictate]')) button.hidden = !ears.ready;
+}
+
+// Speak instead of typing, in the idea box and the note box.
+document.addEventListener('click', async (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-dictate]');
+  if (!button) return;
+  if (ears.busy) { ears.stop(); return; }
+  micUsed = true;
+  const box = $<HTMLTextAreaElement>(`#${button.dataset.dictate}`);
+  const label = button.querySelector('span')!;
+  button.classList.add('on');
+  label.textContent = 'Listening… press to stop';
+  const heard = await ears.listen(12000);
+  button.classList.remove('on');
+  label.textContent = 'Speak';
+  if (!heard) {
+    if (button.dataset.dictate === 'idea') $('#start-note').textContent = 'I did not catch that. Try again, or type it.';
+    else toast('I did not catch that. Try again, or type it.');
+    return;
+  }
+  box.value = box.value.trim() ? `${box.value.trim()} ${heard}` : heard.charAt(0).toUpperCase() + heard.slice(1);
+  grow(box);
+  box.focus();
+});
+
 showStart();
 void loadReady();
+
