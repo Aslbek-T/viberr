@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plant Growth Tracker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="hero">
+    <h1>🌱 Plant Growth Tracker</h1>
+    <p>Measure your plants and watch them grow.</p>
+  </header>
+
+  <main>
+    <section class="card add-card">
+      <h2>Add a plant</h2>
+      <form id="add-plant-form" class="row">
+        <input id="plant-name" type="text" placeholder="e.g. Basil on the windowsill" maxlength="60" required>
+        <button type="submit">Add plant</button>
+      </form>
+    </section>
+
+    <p id="empty-message" class="empty">No plants yet. Add your first one above!</p>
+    <section id="plant-list" class="plant-list"></section>
+  </main>
+
+  <template id="plant-template">
+    <article class="card plant">
+      <div class="plant-head">
+        <h3 class="plant-name"></h3>
+        <button class="link danger remove-plant" type="button">Remove plant</button>
+      </div>
+      <div class="stats">
+        <div><span class="stat-label">Now</span><span class="stat current">—</span></div>
+        <div><span class="stat-label">Grown</span><span class="stat growth">—</span></div>
+        <div><span class="stat-label">Measurements</span><span class="stat count">0</span></div>
+      </div>
+      <svg class="chart" viewBox="0 0 300 100" preserveAspectRatio="none" aria-label="Growth chart"></svg>
+      <form class="row add-measure">
+        <input class="measure-date" type="date" required aria-label="Date">
+        <input class="measure-height" type="number" min="0" step="0.1" placeholder="Height (cm)" required aria-label="Height in centimeters">
+        <button type="submit">Save height</button>
+      </form>
+      <ul class="history"></ul>
+    </article>
+  </template>
+
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -3,9 +3,6 @@ dist/
 .env
 .env.*
 !.env.example
-sessions/raw/
-sessions/live/
-web/public/sessions/
+runs/
 .DS_Store
 *.log
-sessions/memory.json

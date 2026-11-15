@@ -1,12 +1,21 @@
 import { config as loadEnv } from 'dotenv';
-import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-loadEnv({ path: path.join(ROOT, '.env.local') });
 loadEnv({ path: path.join(ROOT, '.env') });
+loadEnv({ path: path.join(ROOT, '.env.local') });
 
 export const PORT = Number(process.env.PORT ?? 4321);
-export const SESSIONS_DIR = path.join(ROOT, 'sessions');
-export const NO_WAIT = process.env.BUILDSCAPE_NO_WAIT === '1';
-export const DECISION_TIMEOUT_MS = 60_000;
+// Only this computer can reach the brain: it can start a coding agent, so it must never be public.
+export const HOST = '127.0.0.1';
+// Projects are built outside this repo so Claude Code doesn't read our own AGENTS.md as instructions.
+export const PROJECTS_DIR = process.env.BUILDSCAPE_PROJECTS_DIR ?? path.join(os.homedir(), 'Buildscape');
+export const RUNS_DIR = path.join(ROOT, 'runs');
+export const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? '';
+export const GEMINI_MODEL = process.env.GEMINI_MODEL ?? '';
+export const CLAUDE_BIN = process.env.BUILDSCAPE_CLAUDE_BIN ?? 'claude';
+export const CLAUDE_MODEL = process.env.BUILDSCAPE_CLAUDE_MODEL ?? '';
+/** How long the builder waits for the user's answer before giving up on that step. */
+export const ASK_TIMEOUT_MS = 9 * 60_000;

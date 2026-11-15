@@ -3,56 +3,53 @@ import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { WebSocketServer } from 'ws';
-import { PORT, ROOT } from './config.ts';
-import { CONCEPTS, learnedConcepts } from './concepts.ts';
-import { handleClaudeHook } from './adapters/claude.ts';
-import { hub } from './hub.ts';
-import { listSessions, startReplay, stopReplay } from './replay.ts';
+import { HOST, PORT, PROJECTS_DIR, ROOT } from './config.ts';
+import { runner } from './runner.ts';
+import { story } from './story.ts';
+import { checkGemini, narratorKind } from './translator.ts';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
 
-app.get('/health', (_req, res) => {
-  res.json({ ok: true, mode: hub.mode, sources: [...hub.sources], clients: hub.clients.size });
+// The brain can start a coding agent, so only pages served from this computer may call it.
+const local = (origin?: string) => !origin || /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
+app.use('/api', (req, res, next) => {
+  if (!local(req.headers.origin)) { res.status(403).json({ ok: false, error: 'Only this computer can use Buildscape.' }); return; }
+  next();
 });
 
-// --- Adapter input ---
+app.get('/health', (_req, res) => res.json({ ok: true, running: story.state.running, narrator: narratorKind() }));
+
+app.post('/api/run', (req, res) => {
+  const idea = String(req.body?.idea ?? '').trim().slice(0, 2000);
+  if (idea.length < 3) { res.status(400).json({ ok: false, error: 'Tell the builder what you want to make.' }); return; }
+  res.json(runner.start(idea, req.body?.change === true));
+});
+app.post('/api/stop', (_req, res) => { runner.stop(); res.json({ ok: true }); });
+
+// Claude Code hooks. The answer may be held open while the person decides.
 app.post('/hook/claude', async (req, res) => {
-  try { res.json(await handleClaudeHook(req.body)); } catch (err) {
-    console.error('[claude] hook failed', err);
-    res.json({});
-  }
+  try { res.json(await runner.onHook(req.body)); } catch (err) { console.error('[hook]', err); res.json({}); }
 });
-// TODO(A6): /hook/cursor   TODO(A7): /hook/codex
 
-// --- Browser API ---
-app.get('/api/sessions', (_req, res) => res.json(listSessions()));
-app.get('/api/concepts', (_req, res) => res.json(CONCEPTS));
-app.get('/api/memory/:userId', (req, res) => res.json(learnedConcepts(req.params.userId)));
-app.post('/api/replay', (req, res) => {
-  const { file, speed } = req.body ?? {};
-  startReplay(String(file), Number(speed) || 1).catch((e) => console.error('[replay]', e));
-  res.json({ ok: true });
+// The app that was just built, so "Open your app" works.
+app.use('/preview', (req, res, next) => {
+  if (!runner.dir) { res.status(404).send('Nothing has been built yet.'); return; }
+  express.static(runner.dir, { dotfiles: 'ignore' })(req, res, next);
 });
-app.post('/api/replay/stop', (_req, res) => { stopReplay(); res.json({ ok: true }); });
 
-// Session files for the web app's offline fixture mode.
-app.use('/sessions', express.static(path.join(ROOT, 'sessions'), { dotfiles: 'deny' }));
-
-// Serve the built web app too, so live mode works in any browser at http://localhost:4321
 const dist = path.join(ROOT, 'web/dist');
 if (fs.existsSync(dist)) {
   app.use(express.static(dist));
   app.get('*', (_req, res) => res.sendFile(path.join(dist, 'index.html')));
 }
 
-hub.onReplayRequest = (file, speed) => { startReplay(file, speed).catch((e) => console.error('[replay]', e)); };
-
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws' });
-wss.on('connection', (ws) => hub.addClient(ws));
+const wss = new WebSocketServer({ server, path: '/ws', verifyClient: ({ origin }: { origin?: string }) => local(origin) });
+wss.on('connection', (ws) => story.addClient(ws));
 
-server.listen(PORT, () => {
-  console.log(`\n  Buildscape brain on http://localhost:${PORT}  (ws: /ws)`);
-  console.log(`  narrator: ${process.env.NARRATOR ?? 'template'}  sessions: ${listSessions().length}\n`);
+server.listen(PORT, HOST, () => {
+  console.log(`\n  Buildscape is running: http://localhost:${PORT}`);
+  console.log(`  Projects are built in: ${PROJECTS_DIR}`);
+  void checkGemini().then((line) => console.log(`  Guide: ${line}\n`));
 });

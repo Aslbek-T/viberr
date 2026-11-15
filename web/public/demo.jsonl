@@ -1,0 +1,44 @@
+{"t":0,"msg":{"type":"state","data":{"idea":"An app to track how tall my plants grow","running":true,"stage":"plan","visited":["plan"],"tasks":[],"now":"","ask":null,"finished":null,"narrator":"template"}}}
+{"t":0,"msg":{"type":"now","stage":"plan","text":"Your builder is reading your idea and getting the blueprint paper out."}}
+{"t":1,"msg":{"type":"task","data":{"id":"t_mwhgluxw0","stage":"plan","text":"Read your idea carefully"}}}
+{"t":7002,"msg":{"type":"now","stage":"plan","text":"Your builder is reading your idea and drawing the blueprint: a short list of what your app should do."}}
+{"t":7002,"msg":{"type":"task","data":{"id":"t_mwhgm0ce1","stage":"plan","text":"Wrote down the plan for your app"}}}
+{"t":8303,"msg":{"type":"ask","data":{"question":"Here is the plan for your app. Shall I start building?","details":["Add each of your plants with a name","Write down how tall a plant is whenever you measure it","See how much each plant has grown since you started, with a simple growth picture","Remove a plant or a measurement you no longer want","Everything is remembered the next time you open the page"],"options":[{"label":"Yes, build it","explain":"The builder starts with the foundation."},{"label":"Not yet","explain":"The builder stops so you can describe your idea differently."}],"recommended":0,"id":"ask_mwhgm1ci2"}}}
+{"t":10534,"msg":{"type":"answered","id":"ask_mwhgm1ci2","option":0}}
+{"t":10534,"msg":{"type":"task","data":{"id":"t_mwhgm32i3","stage":"plan","text":"You approved the plan"}}}
+{"t":14004,"msg":{"type":"stage","stage":"setup"}}
+{"t":14004,"msg":{"type":"now","stage":"setup","text":"The foundation is going in. Nothing is visible yet, but everything else will stand on it."}}
+{"t":14004,"msg":{"type":"task","data":{"id":"t_mwhgm5qw4","stage":"setup","text":"Gave your project a name and a home"}}}
+{"t":14004,"msg":{"type":"task","data":{"id":"t_mwhgm5qw5","stage":"setup","text":"Got the toolbox ready for checking the work later"}}}
+{"t":21004,"msg":{"type":"stage","stage":"look"}}
+{"t":21006,"msg":{"type":"now","stage":"look","text":"The walls and windows are going up: these are the screens you will see and touch."}}
+{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e6","stage":"look","text":"Built the main screen: Plant Growth Tracker"}}}
+{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e7","stage":"look","text":"Added the \"Add plant\" button"}}}
+{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e8","stage":"look","text":"Added the \"Remove plant\" button"}}}
+{"t":31503,"msg":{"type":"now","stage":"look","text":"Your builder is shaping what the app looks like. Developers call this part the \"frontend\"."}}
+{"t":31503,"msg":{"type":"task","data":{"id":"t_mwhgmj8z9","stage":"look","text":"Chose the colors and the layout"}}}
+{"t":49004,"msg":{"type":"stage","stage":"logic"}}
+{"t":49006,"msg":{"type":"now","stage":"logic","text":"Now the wiring: the rules that decide what happens when you tap a button."}}
+{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6a","stage":"logic","text":"Taught the app how to add a plant"}}}
+{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6b","stage":"logic","text":"Taught the app how to remove a plant"}}}
+{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6c","stage":"logic","text":"Taught the app how to sort by date"}}}
+{"t":52504,"msg":{"type":"stage","stage":"memory"}}
+{"t":52506,"msg":{"type":"now","stage":"memory","text":"The app is learning to remember things. The place where information is kept is called a \"database\"."}}
+{"t":52506,"msg":{"type":"task","data":{"id":"t_mwhgmzged","stage":"memory","text":"Made a safe place to keep your information"}}}
+{"t":52506,"msg":{"type":"task","data":{"id":"t_mwhgmzgee","stage":"memory","text":"Taught the app to remember your plants"}}}
+{"t":63005,"msg":{"type":"stage","stage":"check"}}
+{"t":63005,"msg":{"type":"now","stage":"check","text":"Inspection time: your builder is running small automatic checks to make sure everything works."}}
+{"t":63005,"msg":{"type":"task","data":{"id":"t_mwhgn7k1f","stage":"check","text":"Wrote checks for the important parts"}}}
+{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2g","stage":"check","text":"Check: Adding a plant puts it in the list"}}}
+{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2h","stage":"check","text":"Check: A plant with a blank name is not added"}}}
+{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2i","stage":"check","text":"Ran all the checks"}}}
+{"t":63006,"msg":{"type":"problem","text":"The builder found a problem and is fixing it."}}
+{"t":66505,"msg":{"type":"stage","stage":"logic"}}
+{"t":66505,"msg":{"type":"now","stage":"logic","text":"Your builder is connecting the buttons to what they should do. You never see this part, but nothing works without it."}}
+{"t":66505,"msg":{"type":"task","data":{"id":"t_mwhgna99j","stage":"logic","text":"Connected the buttons to what they do"}}}
+{"t":70006,"msg":{"type":"stage","stage":"check"}}
+{"t":70007,"msg":{"type":"now","stage":"check","text":"Inspection time: your builder is running small automatic checks to make sure everything works."}}
+{"t":70007,"msg":{"type":"task","data":{"id":"t_mwhgncyjk","stage":"check","text":"Every check passed"}}}
+{"t":73726,"msg":{"type":"stage","stage":"done"}}
+{"t":73726,"msg":{"type":"now","stage":"done","text":"Move-in day. Your app is ready."}}
+{"t":73726,"msg":{"type":"finished","data":{"ok":true,"summary":"Your app is ready. The builder finished 20 jobs, from the blueprint to the final inspection. Open it and try it out, then ask for any change you like.","previewUrl":"/preview/index.html?v=mwhgnftt"}}}

@@ -4,49 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Buildscape</title>
-    <meta name="description" content="Watch, understand and steer your AI coding agent." />
-    <link rel="stylesheet" href="/src/styles.css" />
+    <meta name="description" content="Describe an app, then watch it get built like a house, explained in plain language." />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23142b25'/%3E%3Cpath d='M5 17L16 7l11 10z' fill='%23c9573f'/%3E%3Crect x='8' y='17' width='16' height='9' fill='%23f8ebd0'/%3E%3Crect x='14' y='20' width='4' height='6' fill='%232f5d50'/%3E%3C/svg%3E" />
   </head>
   <body>
-    <header class="topbar">
-      <div class="brand">Buildscape</div>
-      <div id="badge" class="badge" role="status" aria-live="polite">Connecting…</div>
-      <div class="controls">
-        <label>Theme
-          <select id="theme-select">
-            <option value="lab">Lab</option>
-            <option value="kitchen">Kitchen</option>
-            <option value="office">Office</option>
-          </select>
-        </label>
-        <label>Replay
-          <select id="replay-select"><option value="">Pick a session…</option></select>
-        </label>
-        <label>Speed
-          <select id="speed-select">
-            <option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option>
-          </select>
-        </label>
-        <button id="settings-btn" type="button">Settings</button>
-      </div>
-    </header>
-
-    <main class="layout">
-      <section class="stage">
-        <div id="game" aria-label="The building where your AI agents work"></div>
-      </section>
-      <aside class="timeline" aria-label="New ideas and steps so far">
-        <div id="concepts" class="concepts" aria-live="polite"></div>
-        <h2>Steps</h2>
-        <ol id="steps"></ol>
-      </aside>
-    </main>
-
-    <footer id="caption" class="caption" role="status" aria-live="polite">Waiting for your agent to start…</footer>
-
-    <div id="decision" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="decision-q"></div>
-    <div id="onboarding" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="ob-title"></div>
-
+    <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

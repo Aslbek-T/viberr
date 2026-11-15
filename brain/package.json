@@ -5,10 +5,6 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/server.ts",
     "start": "tsx src/server.ts",
-    "replay": "tsx scripts/replay-cli.ts",
-    "fixtures": "tsx scripts/make-fixtures.ts",
-    "hooks:install": "tsx scripts/install-hooks.ts",
-    "hooks:test": "tsx scripts/test-hooks.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
