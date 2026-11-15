@@ -1,6 +1,6 @@
 import { AGENTS, STAGES, stageInfo, type AgentId, type Ask, type Block, type MessageReply, type PlanSection, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
 import { sound } from './audio.ts';
-import { ears, matchAnswer, voice } from './voice.ts';
+import { COMMAND_HELP, ears, matchAnswer, parseCommand, voice, type Command } from './voice.ts';
 import { demo, live, type Feed } from './net.ts';
 import { builder, World } from './world.ts';
 import './styles.css';
@@ -103,21 +103,23 @@ $('#app').innerHTML = `
         <div class="face" aria-hidden="true"><svg viewBox="-22 -24 44 44">${builder(0, 0, 1).replace(/<ellipse[^>]*>/, '')}</svg></div>
         <p id="now" role="status" aria-live="polite"></p>
       </div>
+      <div id="composer" class="composer">
+        <form id="dock" class="dock">
+          <label for="dock-text">Send a note while it works</label>
+          <textarea id="dock-text" rows="1" placeholder="A note for the builder, or press Speak"></textarea>
+          ${dictateButton('dock-text')}
+          <button class="btn" type="submit">Send</button>
+        </form>
+      </div>
     </div>
-    <aside id="panel" class="panel"></aside>
+    <div class="side">
+      <aside id="panel" class="panel"></aside>
+      <aside id="chat-history" class="chat-history" hidden>
+        ${wordmark}
+        <div id="live-answers" class="answers" aria-live="polite"></div>
+      </aside>
+    </div>
   </main>
-  <div id="composer" class="composer">
-    <aside id="chat-history" class="chat-history" hidden>
-      ${wordmark}
-      <div id="live-answers" class="answers" aria-live="polite"></div>
-    </aside>
-    <form id="dock" class="dock">
-      <label for="dock-text">Send a note while it works</label>
-      <textarea id="dock-text" rows="2" placeholder="For example: use plain labels, or add a graph of the results"></textarea>
-      ${dictateButton('dock-text')}
-      <button class="btn" type="submit">Send</button>
-    </form>
-  </div>
   <div id="ask" class="ask" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>
   <div id="banner" class="banner" aria-hidden="true"></div>
@@ -130,7 +132,7 @@ world.onPick = (block) => { picked = block; renderPanel(); $('#panel').scrollTop
 function grow(box: HTMLTextAreaElement) {
   const tall = box.id === 'idea';
   box.style.height = 'auto';
-  box.style.height = `${Math.min(Math.max(box.scrollHeight, tall ? 180 : 72), tall ? 320 : 240)}px`;
+  box.style.height = `${Math.min(Math.max(box.scrollHeight, tall ? 180 : 48), tall ? 320 : 96)}px`;
 }
 
 const isDone = (id: StageId) => !!view && view.visited.includes(id) && (id !== view.stage || !!view.finished?.ok);
@@ -275,10 +277,10 @@ function renderTop() {
   const dockBox = $<HTMLTextAreaElement>('#dock-text');
   if (view.running) {
     dockLabel.textContent = 'Send a note while it works';
-    dockBox.placeholder = 'For example: use plain labels, or add a graph of the results';
+    dockBox.placeholder = 'A note for the builder, or press Speak';
   } else {
     dockLabel.textContent = 'Ask for a change, or ask a question';
-    dockBox.placeholder = 'For example: add a place to write a short note';
+    dockBox.placeholder = 'A change or a question, or press Speak';
   }
   $('#sound-btn').textContent = sound.on ? 'Sound on' : 'Sound off';
   $('#voice-btn').textContent = voice.on ? 'Voice on' : 'Voice off';
@@ -378,15 +380,19 @@ async function apply(message: StoryMsg, stale: () => boolean) {
       sound.stage();
       void banner(message.stage);
       open(message.stage);
+      // The guide explains the new part while the builder walks there, and the build picks up once it has finished.
+      const talk = message.stage === 'done' ? Promise.resolve() : explainAloud(view.guides?.[message.stage] || stageInfo(message.stage).lesson);
       if (message.stage !== 'done') await world.goTo(message.stage);
+      await talk;
+      if (stale()) return;
       stageSince = performance.now();
       break;
     }
     case 'now':
       view.now = message.text;
       renderNow();
-      void voice.say(message.text);
-      await wait(400);
+      if (message.explain) await explainAloud(message.text);
+      else { void voice.say(message.text); await wait(400); }
       break;
     case 'block': {
       const old = view.blocks.find((block) => block.id === message.data.id);
@@ -705,6 +711,8 @@ async function hearAnswer() {
   mic.querySelector('span')!.textContent = 'Answer by voice';
   if (!heard) { heardLine.textContent = 'I did not catch that. Press the microphone and try again, or press a button.'; return; }
   const choice = matchAnswer(heard, labels);
+  const command = choice === null ? parseCommand(heard) : null;
+  if (command && command.kind !== 'start-over') { heardLine.textContent = `I heard “${heard}”.`; runCommand(command, heard); return; }
   if (choice === null) {
     heardLine.textContent = `I heard “${heard}”. Say “${labels[0]}” or “${labels[1]}”.`;
     void voice.say(`Sorry, I did not understand. Say ${labels[0]}, or ${labels[1]}.`, true);
@@ -725,6 +733,88 @@ async function hearAnswer() {
   void voice.say(`To be safe, press ${labels[choice]} to confirm.`, true);
 }
 
+/** Reads an explanation and waits for it, so the build picks up right after. Without the voice, a short pause to read it. */
+async function explainAloud(text: string) {
+  if (!voice.on) { await wait(Math.min(1500 + text.length * 20, 4500)); return; }
+  await Promise.race([voice.say(text, 'queue'), new Promise((r) => setTimeout(r, 30_000))]);
+}
+
+function openOrPoint(url: string | undefined, selector: string, missing: string, label: string) {
+  if (!url) { void voice.say(missing, true); toast(missing); return; }
+  const tab = window.open(url, '_blank', 'noopener');
+  if (!tab) { // the browser blocked the new tab: point at the button instead
+    document.querySelector<HTMLElement>(selector)?.focus();
+    void voice.say(`Press ${label} to open it.`, true);
+  } else void voice.say(`Opening ${label.toLowerCase()}.`, true);
+}
+
+/** Does what a spoken command asks. Anything hard to undo only points at its button. */
+function runCommand(command: Command, heard: string) {
+  const say = (text: string) => { void voice.say(text, true); toast(text); };
+  switch (command.kind) {
+    case 'agent': {
+      const label = AGENTS.find((agent) => agent.id === command.agent)?.label ?? command.agent;
+      if (!view || source === 'demo') {
+        const radio = document.querySelector<HTMLInputElement>(`input[name="agent"][value="${command.agent}"]`);
+        if (radio) radio.checked = true;
+        say(`${label} will build your app.`);
+        return;
+      }
+      const select = $<HTMLSelectElement>('#agent-live');
+      if (select.value === command.agent) { say(`${label} is already building.`); return; }
+      select.value = command.agent;
+      select.dispatchEvent(new Event('change'));
+      say(`Switching to ${label}.`);
+      return;
+    }
+    case 'open-app':
+      openOrPoint(view?.finished?.ok ? view.finished.previewUrl : undefined, '.finish-actions .btn.primary', 'Your app is not ready yet. I will tell you when it is.', 'Open your app');
+      return;
+    case 'open-guide':
+      openOrPoint(view?.finished?.handoffUrl, '.finish-actions .btn:not(.primary)', 'The developer guide is written at the end of the build.', 'Guide for a developer');
+      return;
+    case 'stop':
+      if (!view?.running || source === 'demo') { say('Nothing is being built right now.'); return; }
+      void fetch('/api/stop', { method: 'POST' });
+      say('Stopping the builder.');
+      return;
+    case 'start-over':
+      $('#reset-btn').focus();
+      say('To be safe, press Start over to confirm.');
+      return;
+    case 'voice':
+      if (voice.on !== command.on) voice.toggle();
+      renderTop();
+      if (command.on) void voice.say('Voice is on.', true);
+      return;
+    case 'sound':
+      if (sound.on !== command.on) sound.toggle();
+      renderTop();
+      return;
+    case 'show':
+      if (!view) { say('Start a build first, then you can walk through its parts.'); return; }
+      if (!view.visited.includes(command.stage as StageId)) { say('The builder has not reached that part yet.'); return; }
+      open(command.stage as StageId);
+      world.focus(shown);
+      void voice.say(view.guides?.[shown] || stageInfo(shown).lesson, true);
+      return;
+    case 'where':
+      void voice.say(view ? `${view.now} ${view.running ? `We are in ${stageInfo(view.stage).name}: ${stageInfo(view.stage).real.toLowerCase()}.` : ''}` : 'Nothing is being built yet. Tell me your idea.', true);
+      return;
+    case 'summary':
+      void voice.say(view?.finished?.summary ?? 'There is no summary yet. It comes when the build is done.', true);
+      return;
+    case 'help':
+      say(COMMAND_HELP);
+      return;
+    case 'demo':
+      if (view) { say('Press Start over first, then ask for the demo.'); return; }
+      void startDemo();
+      return;
+  }
+  void heard;
+}
+
 function updateMics() {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-dictate]')) button.hidden = !ears.ready;
 }
@@ -742,6 +832,8 @@ document.addEventListener('click', async (event) => {
   const heard = await ears.listen(12000);
   button.classList.remove('on');
   label.textContent = 'Speak';
+  const command = heard ? parseCommand(heard) : null;
+  if (command) { runCommand(command, heard!); return; }
   if (!heard) {
     if (button.dataset.dictate === 'idea') $('#start-note').textContent = 'I did not catch that. Try again, or type it.';
     else toast('I did not catch that. Try again, or type it.');
