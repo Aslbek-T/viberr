@@ -86,8 +86,8 @@ web/ (Vite + TypeScript, SVG scenes) <── WebSocket: only friendly messages (
   (`web/public/demo.jsonl`, `web/public/demo-app/`).
 - `runs/` recordings of your own builds (not committed). Copy one to `web/public/demo.jsonl` to make it the demo.
 
-## Credits and AI use
+## Credits
 
-See [docs/AI_USAGE.md](docs/AI_USAGE.md). All drawings are SVG made in code; all sounds are synthesized in
+All drawings are SVG made in code; all sounds are synthesized in
 the browser. Stage ideas, the hardhat builder and the color mood were inspired by our teammate's
 prototype, [vibeerr](https://github.com/DevBehruz/vibeerr).

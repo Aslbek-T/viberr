@@ -58,5 +58,4 @@ web/ (Vite + TS, SVG) <── WebSocket /ws: StoryMsg only ── brain/ (Node, 
 5. Every animation respects `prefers-reduced-motion`. Everything works with the keyboard.
 6. No secrets in git. Keys live in `.env` only.
 7. The brain binds to 127.0.0.1 and checks the Origin header. Keep it that way: it can start a coding agent.
-8. After a meaningful task, add one line to `docs/AI_USAGE.md`: `- <tool>: <what it built> (<files>)`.
-9. `main` must always run with `npm install && npm start`. Run `npm run typecheck` before pushing.
+8. `main` must always run with `npm install && npm start`. Run `npm run typecheck` before pushing.
