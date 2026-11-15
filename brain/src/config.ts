@@ -37,6 +37,9 @@ export const ELEVENLABS_SETTINGS = {
   use_speaker_boost: true,
 };
 export const ELEVENLABS_STT_MODEL = env('ELEVENLABS_STT_MODEL') ?? 'scribe_v1';
+// Grok reviews the finished app and suggests improvements. Optional: without a key there is no review.
+export const XAI_API_KEY = env('XAI_API_KEY') ?? '';
+export const XAI_MODEL = env('XAI_MODEL') ?? 'grok-4.7';
 export const CLAUDE_BIN = env('VIBEERR_CLAUDE_BIN') ?? env('BUILDSCAPE_CLAUDE_BIN') ?? 'claude';
 export const CLAUDE_MODEL = env('VIBEERR_CLAUDE_MODEL') ?? env('BUILDSCAPE_CLAUDE_MODEL') ?? '';
 /** How long the builder waits for the user's answer before giving up on that step. */

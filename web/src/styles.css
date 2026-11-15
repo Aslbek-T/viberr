@@ -283,3 +283,14 @@ textarea::-webkit-scrollbar { display: none; }
   .window { grid-template-columns: minmax(0, 1fr) 330px; }
   .top .btn.small { padding: 6px 10px; }
 }
+
+/* ------------------------------------------------------------ Grok's second opinion */
+.review { background: #fff; border: 1.5px solid #e2dfc9; border-left: 5px solid var(--yellow); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 8px; }
+.review h2 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.review .score { background: var(--ink); color: var(--cream); border-radius: 999px; padding: 2px 9px; font-size: 12px; letter-spacing: 0; }
+.review-good li { position: relative; padding-left: 20px; font-size: 14px; margin: 3px 0; }
+.review-good li::before { content: '✓'; position: absolute; left: 2px; color: var(--green); font-weight: 800; }
+.idea { border-top: 1px solid #ece6cc; padding-top: 8px; }
+.idea strong { font-size: 15px; }
+.idea p { font-size: 14px; color: #3d564d; margin: 2px 0 6px; }
+.btn.small-light { padding: 6px 12px; font-size: 13px; box-shadow: 0 2px 0 var(--ink); }

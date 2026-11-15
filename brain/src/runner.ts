@@ -10,6 +10,7 @@ import { ensureGuide, planMarkdown, writeBrief } from './brief.ts';
 import { CLAUDE_MODEL, PORT, PROJECTS_DIR, ROOT } from './config.ts';
 import { isInstall, RISKY_CMD, TEST_CMD, type Raw } from './stages.ts';
 import { story } from './story.ts';
+import { reviewApp } from './review.ts';
 import { translateFinish, translatePlan } from './translator.ts';
 
 // Starts the AI the person already has (Claude, Cursor, or Codex) and listens to what it does.
@@ -336,6 +337,12 @@ class Runner {
       previewUrl: ok && hasPage ? `/preview/index.html?v=${stamp}` : undefined,
       handoffUrl: guideReady ? `/handoff?v=${stamp}` : undefined,
     });
+    if (ok && hasPage) {
+      const generation = this.generation;
+      void reviewApp(run.dir, run.idea).then((review) => {
+        if (review && this.run === run && generation === this.generation && !story.state.running) story.review(review);
+      });
+    }
   }
 
   private readPlan(run: Run) {

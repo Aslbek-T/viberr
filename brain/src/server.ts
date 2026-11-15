@@ -12,6 +12,7 @@ import { runner } from './runner.ts';
 import { story } from './story.ts';
 import { checkGemini, narratorKind } from './translator.ts';
 import { listen, speak, voiceKind, voiceLine } from './voice.ts';
+import { reviewerLine } from './review.ts';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -162,5 +163,6 @@ server.listen(PORT, HOST, () => {
   console.log(`\n  Vibeerr is running: http://localhost:${PORT}`);
   console.log(`  Projects are built in: ${PROJECTS_DIR}`);
   console.log(`  Voice: ${voiceLine()}`);
+  console.log(`  Reviewer: ${reviewerLine()}`);
   void checkGemini().then((line) => console.log(`  Guide: ${line}\n`));
 });

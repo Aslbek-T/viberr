@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { WebSocket } from 'ws';
-import type { AgentId, Ask, Block, ClientMsg, Finished, PlanSection, RecordedLine, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
+import type { AgentId, Ask, Block, ClientMsg, Finished, PlanSection, RecordedLine, Review, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
 import { ASK_TIMEOUT_MS, RUNS_DIR } from './config.ts';
 import { newId } from './ids.ts';
 import { stageOf, type Raw } from './stages.ts';
@@ -214,6 +214,13 @@ class Story {
   }
 
   problem(text: string) { this.send({ type: 'problem', text }); }
+
+  /** Grok's second opinion arrives a little after the build is finished. */
+  review(data: Review) {
+    if (!this.state.finished?.ok) return;
+    this.state.finished = { ...this.state.finished, review: data };
+    this.send({ type: 'review', data });
+  }
 
   // ---------------------------------------------------------------- questions for the person
 

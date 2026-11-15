@@ -74,7 +74,12 @@ export interface Finished {
   structure?: { stage: StageId; parts: { name: string; does: string }[] }[];
   /** The developer handoff written by the builder, for someone who joins the project later. */
   handoffUrl?: string;
+  /** A second opinion on the finished app from Grok, added a few seconds after the build ends (only with XAI_API_KEY). */
+  review?: Review;
 }
+
+/** Grok's plain-language review of the finished app. Each idea's `change` can be sent to the builder as a change. */
+export interface Review { score: number; good: string[]; ideas: { title: string; why: string; change: string }[] }
 
 /** Everything the browser needs to draw the screen. Sent whole when a browser connects. */
 export interface RunState {
@@ -110,7 +115,8 @@ export type StoryMsg =
   | { type: 'problem'; text: string }
   | { type: 'guide'; stage: StageId; text: string }
   | { type: 'note'; text: string }
-  | { type: 'agent'; agent: AgentId };
+  | { type: 'agent'; agent: AgentId }
+  | { type: 'review'; data: Review };
 
 // Browser -> brain
 export type ClientMsg = { type: 'answer'; id: string; option: number; plan?: PlanSection[]; summary?: string };
