@@ -23,7 +23,8 @@ You receive the builder's raw technical activity. Rewrite it for the person. Rul
 
 // Model ids change often, so we try a short list and keep the first one that answers.
 // Set GEMINI_MODEL in .env to force one.
-const CANDIDATES = [GEMINI_MODEL, 'gemini-flash-latest', 'gemini-2.5-flash', 'gemini-flash-lite-latest', 'gemini-2.5-flash-lite']
+// The lite model is first: it is fast and plenty for one friendly sentence.
+const CANDIDATES = [GEMINI_MODEL, 'gemini-flash-lite-latest', 'gemini-flash-latest', 'gemini-2.5-flash-lite']
   .filter((m, i, all) => m && all.indexOf(m) === i);
 let modelAt = 0;
 let warned = false;
