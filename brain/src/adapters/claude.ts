@@ -126,6 +126,7 @@ function describe(command: string) {
 /** Returns the JSON body the hook script prints to stdout for Claude Code. */
 export async function handleClaudeHook(p: ClaudeHook): Promise<object> {
   logRaw(p);
+  console.log(`[claude] ${p.hook_event_name}${p.tool_name ? ' ' + p.tool_name : ''}`);
   const e = toEvent(p);
   if (e) await hub.emit(e);
 

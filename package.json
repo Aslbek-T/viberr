@@ -14,6 +14,7 @@
     "replay": "npm run replay -w brain --",
     "fixtures": "npm run fixtures -w brain",
     "hooks:install": "npm run hooks:install -w brain --",
+    "hooks:test": "npm run hooks:test -w brain",
     "typecheck": "npm run typecheck -w brain && npm run typecheck -w web"
   },
   "devDependencies": {

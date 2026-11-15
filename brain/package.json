@@ -8,6 +8,7 @@
     "replay": "tsx scripts/replay-cli.ts",
     "fixtures": "tsx scripts/make-fixtures.ts",
     "hooks:install": "tsx scripts/install-hooks.ts",
+    "hooks:test": "tsx scripts/test-hooks.ts",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
