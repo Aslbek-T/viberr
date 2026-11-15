@@ -183,6 +183,16 @@ function structureHtml() {
   <p class="flow">How they work together: you use a <b>page</b>, an <b>action</b> decides what happens, the result is <b>saved</b>, and a <b>try-out</b> makes sure the actions still work.</p>`;
 }
 
+/** Grok's second opinion on the finished app, with one button per idea to send it to the builder. */
+function reviewHtml() {
+  const review = view?.finished?.review;
+  if (!review) return '';
+  return `<div class="review"><h2>Second opinion from Grok <span class="score">${review.score}/10</span></h2>
+    ${review.good.length ? `<ul class="review-good">${review.good.map((g) => `<li>${esc(g)}</li>`).join('')}</ul>` : ''}
+    ${review.ideas.map((idea, i) => `<div class="idea"><strong>${esc(idea.title)}</strong><p>${esc(idea.why)}</p>
+      <button class="btn small-light" type="button" data-act="apply-idea" data-i="${i}">Ask the builder to do this</button></div>`).join('')}</div>`;
+}
+
 function renderPanel() {
   if (!view) return;
   const fin = view.finished;
@@ -204,6 +214,7 @@ function renderPanel() {
         ${fin.previewUrl ? `<a class="btn primary" href="${esc(fin.previewUrl)}" target="_blank" rel="noopener">Open your app</a>` : ''}
         ${fin.handoffUrl ? `<a class="btn" href="${esc(fin.handoffUrl)}" target="_blank" rel="noopener">Guide for a developer</a>` : ''}
       </div>
+      ${reviewHtml()}
       ${structureHtml()}
       ${notesHtml()}
       <p class="recap">${view.tasks.length} jobs and ${view.blocks.length} blocks. Click any block to see what it does.</p>`;
@@ -460,6 +471,12 @@ async function apply(message: StoryMsg, stale: () => boolean) {
       view.agent = message.agent;
       renderTop();
       break;
+    case 'review':
+      if (!view.finished?.ok) break;
+      view.finished.review = message.data;
+      if (shown === 'done' && !picked) renderPanel();
+      void voice.say(`Grok looked at your app and gave it ${message.data.score} out of 10.${message.data.ideas[0] ? ` One idea: ${message.data.ideas[0].title}.` : ''} The ideas are on the right.`, 'queue');
+      break;
   }
 }
 
@@ -632,6 +649,7 @@ $('#panel').addEventListener('click', (event) => {
   const act = (event.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
   if (act === 'reset') void startOver();
   if (act === 'back') { picked = null; renderPanel(); }
+  if (act === 'apply-idea') void applyIdea(Number((event.target as HTMLElement).closest<HTMLElement>('[data-i]')?.dataset.i));
 });
 
 $('#dock').addEventListener('submit', async (event) => {
@@ -657,6 +675,18 @@ $('#dock').addEventListener('submit', async (event) => {
     if (out.route === 'note') toast('Sent. The builder reads it on the next step.');
   }
 });
+
+/** Sends one of Grok's ideas to the builder as a change to the app. */
+async function applyIdea(index: number) {
+  const idea = view?.finished?.review?.ideas[index];
+  if (!idea || source === 'demo') return;
+  try {
+    const res = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea: idea.change, change: true, agent: view?.agent }) });
+    const out = await res.json();
+    if (!out.ok) toast(out.error || 'The builder could not start that change.');
+  } catch { toast('Could not reach the builder.'); }
+}
 
 async function startOver() {
   if (source === 'demo') { goHome(true); return; }

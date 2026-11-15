@@ -38,6 +38,8 @@ Optional: copy `.env.example` to `.env` and add a free `GEMINI_API_KEY` from
 https://aistudio.google.com/apikey. With the key, Gemini writes the explanations for your specific app.
 Without it, Vibeerr uses built-in sentences and still works. The terminal prints which one is active.
 
+Optional review: add `XAI_API_KEY` (from https://console.x.ai) and Grok gives each finished app a second opinion: what works, a score, and up to three improvements you can send to the builder with one click.
+
 Optional voice: add `ELEVENLABS_API_KEY` (from https://elevenlabs.io/app/settings/api-keys) to `.env` and the
 guide reads every step aloud in a natural voice. Questions from the builder are read out too, and you can answer
 them by voice: press **Answer by voice** and say "yes" or "not yet". After you use the microphone once, Vibeerr
