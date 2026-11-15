@@ -18,3 +18,4 @@ sunhacks asks teams to credit AI use. One line per meaningful piece of work: `- 
 - Cursor (Grok): landing page leads with the prompt, and choosing a folder opens the person's own folders (web/src/main.ts, web/src/styles.css, brain/src/server.ts)
 - Cursor (Grok): the Cursor choice finds the installed agent command and runs it in the project folder (brain/src/agents.ts, brain/src/runner.ts)
 - Cursor (Grok): older chat stays in a small strip beside the prompt, and the developer guide still opens after a later change (web/src/main.ts, web/src/styles.css, brain/src/brief.ts, brain/src/runner.ts, brain/src/server.ts)
+- Cursor (Grok): folder and AI choices stay on screen on a short or narrow window (web/src/main.ts, web/src/styles.css)

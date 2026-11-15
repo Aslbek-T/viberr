@@ -43,11 +43,11 @@ $('#app').innerHTML = `
 <section id="start" class="start">
   <div class="start-card">
     <div class="logo" aria-hidden="true"><svg viewBox="-40 -40 80 110">${builder(0, 0, 1)}</svg></div>
-    ${wordmark}
-    <h1>Describe the app you want.</h1>
-    <p class="lead">Tell it your idea in plain words. A builder you already have writes a short plan you can edit, then makes the app while a guide explains each part. No coding needed.</p>
     <form id="idea-form" class="start-layout">
       <div class="prompt-main">
+        ${wordmark}
+        <h1>Describe the app you want.</h1>
+        <p class="lead">Tell it your idea in plain words. A builder you already have writes a short plan you can edit, then makes the app while a guide explains each part. No coding needed.</p>
         <label class="sr" for="idea">Your question or idea</label>
         <textarea id="idea" rows="8" placeholder="For example: a chart of how tall my plants grow each week, with the date of each measurement" required></textarea>
         <div class="chips" aria-label="Examples">${EXAMPLES.map((example) => `<button type="button" class="chip">${esc(example)}</button>`).join('')}</div>
@@ -122,7 +122,7 @@ world.onPick = (block) => { picked = block; renderPanel(); $('#panel').scrollTop
 function grow(box: HTMLTextAreaElement) {
   const tall = box.id === 'idea';
   box.style.height = 'auto';
-  box.style.height = `${Math.min(Math.max(box.scrollHeight, tall ? 220 : 72), tall ? 420 : 240)}px`;
+  box.style.height = `${Math.min(Math.max(box.scrollHeight, tall ? 180 : 72), tall ? 320 : 240)}px`;
 }
 
 const isDone = (id: StageId) => !!view && view.visited.includes(id) && (id !== view.stage || !!view.finished?.ok);
