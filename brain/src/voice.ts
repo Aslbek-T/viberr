@@ -1,4 +1,4 @@
-import { ELEVENLABS_API_KEY, ELEVENLABS_MODEL, ELEVENLABS_STT_MODEL, ELEVENLABS_VOICE_ID } from './config.ts';
+import { ELEVENLABS_API_KEY, ELEVENLABS_MODEL, ELEVENLABS_SETTINGS, ELEVENLABS_STT_MODEL, ELEVENLABS_VOICE_ID } from './config.ts';
 
 // The guide's voice. With ELEVENLABS_API_KEY the brain asks ElevenLabs to read the guide's words aloud and
 // can turn a short spoken answer back into words. The key never leaves the brain. Without a key (or if
@@ -37,7 +37,7 @@ export async function speak(text: string): Promise<Buffer | null> {
     const res = await fetch(`${API}/text-to-speech/${encodeURIComponent(ELEVENLABS_VOICE_ID)}?output_format=mp3_44100_128`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'audio/mpeg', 'xi-api-key': ELEVENLABS_API_KEY },
-      body: JSON.stringify({ text: words, model_id: ELEVENLABS_MODEL, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }),
+      body: JSON.stringify({ text: words, model_id: ELEVENLABS_MODEL, voice_settings: ELEVENLABS_SETTINGS }),
       signal: AbortSignal.timeout(12_000),
     });
     if (!res.ok) { giveUp(res.status, await res.text()); return null; }

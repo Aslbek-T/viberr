@@ -24,6 +24,18 @@ export const ELEVENLABS_API_KEY = env('ELEVENLABS_API_KEY') ?? '';
 export const ELEVENLABS_VOICE_ID = env('ELEVENLABS_VOICE_ID') ?? 'EXAVITQu4vr4xnSDxMaL';
 // Flash is the fastest and cheapest model, so the voice keeps up with the build.
 export const ELEVENLABS_MODEL = env('ELEVENLABS_MODEL') ?? 'eleven_flash_v2_5';
+/** How the voice sounds. Leave empty for the defaults below. Each is a number; see .env.example. */
+const num = (name: string, fallback: number, min: number, max: number) => {
+  const v = Number(env(name));
+  return Number.isFinite(v) && env(name) !== undefined ? Math.min(max, Math.max(min, v)) : fallback;
+};
+export const ELEVENLABS_SETTINGS = {
+  stability: num('ELEVENLABS_STABILITY', 0.5, 0, 1),
+  similarity_boost: num('ELEVENLABS_SIMILARITY', 0.75, 0, 1),
+  style: num('ELEVENLABS_STYLE', 0, 0, 1),
+  speed: num('ELEVENLABS_SPEED', 1, 0.7, 1.2),
+  use_speaker_boost: true,
+};
 export const ELEVENLABS_STT_MODEL = env('ELEVENLABS_STT_MODEL') ?? 'scribe_v1';
 export const CLAUDE_BIN = env('VIBEERR_CLAUDE_BIN') ?? env('BUILDSCAPE_CLAUDE_BIN') ?? 'claude';
 export const CLAUDE_MODEL = env('VIBEERR_CLAUDE_MODEL') ?? env('BUILDSCAPE_CLAUDE_MODEL') ?? '';
