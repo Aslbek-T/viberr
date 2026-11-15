@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Buildscape</title>
+    <meta name="description" content="Watch, understand and steer your AI coding agent." />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">Buildscape</div>
+      <div id="badge" class="badge" role="status" aria-live="polite">Connecting…</div>
+      <div class="controls">
+        <label>Theme
+          <select id="theme-select">
+            <option value="lab">Lab</option>
+            <option value="kitchen">Kitchen</option>
+            <option value="office">Office</option>
+          </select>
+        </label>
+        <label>Replay
+          <select id="replay-select"><option value="">Pick a session…</option></select>
+        </label>
+        <label>Speed
+          <select id="speed-select">
+            <option value="1">1x</option><option value="2">2x</option><option value="4">4x</option><option value="8">8x</option>
+          </select>
+        </label>
+        <button id="settings-btn" type="button">Settings</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <section class="stage">
+        <div id="game" aria-label="The building where your AI agents work"></div>
+        <div id="concepts" class="concepts" aria-live="polite"></div>
+      </section>
+      <aside class="timeline" aria-label="Steps so far">
+        <h2>Steps</h2>
+        <ol id="steps"></ol>
+      </aside>
+    </main>
+
+    <footer id="caption" class="caption" role="status" aria-live="polite">Waiting for your agent to start…</footer>
+
+    <div id="decision" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="decision-q"></div>
+    <div id="onboarding" class="modal" hidden role="dialog" aria-modal="true" aria-labelledby="ob-title"></div>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

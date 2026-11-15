@@ -1,0 +1,22 @@
+{
+  "name": "buildscape",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Watch, understand and steer your AI coding agent as characters in a building.",
+  "type": "module",
+  "workspaces": ["brain", "web"],
+  "scripts": {
+    "dev": "concurrently -k -n brain,web -c yellow,cyan \"npm run dev -w brain\" \"npm run dev -w web\"",
+    "brain": "npm run dev -w brain",
+    "web": "npm run dev -w web",
+    "build": "npm run build -w web",
+    "start": "npm run build && npm run start -w brain",
+    "replay": "npm run replay -w brain --",
+    "fixtures": "npm run fixtures -w brain",
+    "hooks:install": "npm run hooks:install -w brain --",
+    "typecheck": "npm run typecheck -w brain && npm run typecheck -w web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}
