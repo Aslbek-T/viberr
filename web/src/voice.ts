@@ -12,32 +12,53 @@ let kind: Kind = 'browser';
 let brainUp = () => false;
 let misses = 0;
 
-let audio: HTMLAudioElement | null = null;
+/** A line being read. `hold` pauses it, `resume` continues it from where it stopped, `stop` ends it. */
+interface Playing { hold(): void; resume(): void; stop(): void }
+
+let narration: Playing | null = null;     // the guide's running commentary
+let cutIn: Playing | null = null;         // a question or reply that cut in
 let playing: Promise<void> | null = null;
-let stopPlaying: (() => void) | null = null;
 let pending: { text: string; done: () => void } | null = null;
 /** Explanations wait their turn and are never dropped, unlike ordinary lines. */
 const queued: { text: string; done: () => void }[] = [];
 let token = 0;
+/** While above 0 the narration is paused: the person is talking, typing, or answering a question. */
+let holds = 0;
+let waiters: (() => void)[] = [];
+const released = () => (holds === 0 ? Promise.resolve() : new Promise<void>((resolve) => waiters.push(resolve)));
 
 const clean = (text: string) => text.replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
 
-function browserSay(text: string): Promise<void> {
+/** The browser's own voice. It cannot resume mid-sentence, so a held line starts that sentence again. */
+function browserSay(text: string, slot: 'narration' | 'cutIn'): Promise<void> {
+  const synth = window.speechSynthesis;
+  if (!synth) return Promise.resolve();
   return new Promise((resolve) => {
-    const synth = window.speechSynthesis;
-    if (!synth) { resolve(); return; }
-    const line = new SpeechSynthesisUtterance(text);
-    line.rate = 1.02;
-    const english = synth.getVoices().filter((v) => /^en(-|_|$)/i.test(v.lang));
-    line.voice = english.find((v) => /natural|samantha|google us|aria|jenny/i.test(v.name)) ?? english[0] ?? null;
-    const timer = window.setTimeout(resolve, 2500 + text.length * 90); // some browsers never fire "end"
-    line.onend = line.onerror = () => { clearTimeout(timer); resolve(); };
-    stopPlaying = () => { synth.cancel(); clearTimeout(timer); resolve(); };
-    synth.speak(line);
+    let state: 'on' | 'held' | 'over' = 'on';
+    let timer = 0;
+    const finish = () => { if (state === 'over') return; state = 'over'; clearTimeout(timer); if (slot === 'narration' ? narration === me : cutIn === me) set(null); resolve(); };
+    const start = () => {
+      const line = new SpeechSynthesisUtterance(text);
+      line.rate = 1.02;
+      const english = synth.getVoices().filter((v) => /^en(-|_|$)/i.test(v.lang));
+      line.voice = english.find((v) => /natural|samantha|google us|aria|jenny/i.test(v.name)) ?? english[0] ?? null;
+      timer = window.setTimeout(finish, 2500 + text.length * 90); // some browsers never fire "end"
+      line.onend = line.onerror = () => { if (state === 'on') finish(); };
+      synth.speak(line);
+    };
+    const set = (value: Playing | null) => { if (slot === 'narration') narration = value; else cutIn = value; };
+    const me: Playing = {
+      hold() { if (state !== 'on') return; state = 'held'; clearTimeout(timer); synth.cancel(); },
+      resume() { if (state !== 'held') return; state = 'on'; start(); },
+      stop() { const was = state; state = 'on'; if (was === 'on') synth.cancel(); finish(); },
+    };
+    set(me);
+    start();
   });
 }
 
-async function naturalSay(text: string, mine: number): Promise<boolean> {
+/** The ElevenLabs voice, through the brain. Pausing keeps the exact spot. */
+async function naturalSay(text: string, mine: number, slot: 'narration' | 'cutIn'): Promise<boolean> {
   if (kind !== 'elevenlabs' || !brainUp()) return false;
   let res: Response;
   try {
@@ -46,21 +67,34 @@ async function naturalSay(text: string, mine: number): Promise<boolean> {
   if (res.status !== 200) { if (++misses >= 3) kind = 'browser'; return false; } // keep trying a few times, then stop waiting on it
   misses = 0;
   const url = URL.createObjectURL(await res.blob());
-  if (mine !== token) { URL.revokeObjectURL(url); return true; } // something more urgent came first
+  if (slot === 'narration') await released();
+  if (slot === 'narration' && mine !== token) { URL.revokeObjectURL(url); return true; } // stopped while waiting
   return new Promise((resolve) => {
     const el = new Audio(url);
-    audio = el;
-    const end = () => { URL.revokeObjectURL(url); if (audio === el) audio = null; resolve(true); };
+    let over = false;
+    const end = () => {
+      if (over) return;
+      over = true;
+      URL.revokeObjectURL(url);
+      if (slot === 'narration' ? narration === me : cutIn === me) { if (slot === 'narration') narration = null; else cutIn = null; }
+      resolve(true);
+    };
+    const me: Playing = { hold: () => el.pause(), resume: () => { el.play().catch(end); }, stop: () => { el.pause(); end(); } };
+    if (slot === 'narration') narration = me; else cutIn = me;
     el.onended = el.onerror = end;
-    stopPlaying = () => { el.pause(); end(); };
+    if (slot === 'narration' && holds > 0) return; // held again while loading: resume() starts it
     el.play().catch(() => end()); // autoplay may be blocked until the person clicks something
   });
 }
 
 async function play(text: string) {
   const mine = ++token;
-  const spoke = await naturalSay(text, mine);
-  if (!spoke && mine === token) await browserSay(text);
+  await released();
+  if (mine !== token) return;
+  const spoke = await naturalSay(text, mine, 'narration');
+  if (spoke || mine !== token) return;
+  await released();
+  if (mine === token) await browserSay(text, 'narration');
 }
 
 async function drain(first: string, done: () => void) {
@@ -76,7 +110,6 @@ async function drain(first: string, done: () => void) {
     ({ text, done: finish } = next);
   }
   playing = null;
-  stopPlaying = null;
 }
 
 export const voice = {
@@ -91,16 +124,16 @@ export const voice = {
     return on;
   },
   /**
-   * Reads a line aloud. A normal line waits for the one being read, and only the newest waiting line is kept,
-   * so the voice never falls far behind the build. `true` (a question) cuts in at once.
-   * 'queue' (an explanation) waits its turn and is never dropped.
+   * Reads a line of narration. A normal line waits for the one being read, and only the newest waiting line is
+   * kept, so the voice never falls far behind the build. 'queue' (an explanation) waits its turn and is never
+   * dropped. `true` cuts in: the narration pauses, this is read at once, then the narration carries on.
    * Resolves when the line has been read, or skipped.
    */
   say(text: string, how: boolean | 'queue' = false): Promise<void> {
     const words = clean(text);
     if (!on || !words) return Promise.resolve();
+    if (how === true) return voice.cutIn(words);
     return new Promise((resolve) => {
-      if (how === true) voice.hush();
       if (playing) {
         if (how === 'queue') { queued.push({ text: words, done: resolve }); return; }
         pending?.done();
@@ -110,13 +143,42 @@ export const voice = {
       void drain(words, resolve);
     });
   },
-  /** Stops reading and forgets anything waiting. */
+  /** Pauses the narration (it remembers where it was) and reads this right away. */
+  async cutIn(text: string): Promise<void> {
+    const words = clean(text);
+    if (!on || !words) return;
+    cutIn?.stop();
+    voice.hold();
+    try {
+      const spoke = await naturalSay(words, 0, 'cutIn');
+      if (!spoke) await browserSay(words, 'cutIn');
+    } finally {
+      voice.release();
+    }
+  },
+  /** Ends a question or reply that cut in. The paused narration stays paused while it is held. */
+  stopCutIn() { cutIn?.stop(); },
+  /** Pauses the narration where it is. Every hold needs one release. */
+  hold() {
+    holds++;
+    if (holds === 1) narration?.hold();
+  },
+  /** Undoes one hold. When none are left, the narration continues from where it stopped. */
+  release() {
+    if (holds === 0) return;
+    holds--;
+    if (holds > 0) return;
+    narration?.resume();
+    for (const wake of waiters.splice(0)) wake();
+  },
+  /** Stops everything and forgets anything waiting. */
   hush() {
     token++;
     pending?.done();
     pending = null;
     for (const item of queued.splice(0)) item.done();
-    stopPlaying?.();
+    cutIn?.stop();
+    narration?.stop();
     try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
   },
 };
@@ -133,10 +195,16 @@ export const ears = {
   /** Ends listening early. What was heard so far is still used. */
   stop() { stopListening?.(); },
   /** Listens for one short answer. Resolves with the words heard, or null. */
-  listen(maxMs = 7000): Promise<string | null> {
-    voice.hush();
+  async listen(maxMs = 7000): Promise<string | null> {
     if (stopListening) stopListening();
-    return Recognition ? listenInBrowser(maxMs) : listenThroughBrain(Math.min(maxMs, 6000));
+    // The guide goes quiet while the person talks, then carries on from where it stopped.
+    voice.stopCutIn();
+    voice.hold();
+    try {
+      return await (Recognition ? listenInBrowser(maxMs) : listenThroughBrain(Math.min(maxMs, 6000)));
+    } finally {
+      voice.release();
+    }
   },
 };
 

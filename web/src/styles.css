@@ -36,7 +36,9 @@ ul { padding: 0; list-style: none; }
 .start-card h1 { font-size: clamp(28px, 5vw, 40px); line-height: 1.1; margin: 6px 0 12px; text-wrap: balance; }
 .lead { color: #3d564d; font-size: 17px; max-width: 54ch; margin-bottom: 20px; }
 textarea, .field { width: 100%; font: inherit; font-size: 16px; line-height: 1.45; padding: 12px 14px; border-radius: 14px; border: 2px solid var(--ink); background: #fff; color: var(--ink); }
-textarea { resize: none; min-height: 96px; max-height: 240px; overflow: auto; }
+/* No visible scrollbar, so the right side keeps its rounded corners. The box still scrolls. */
+textarea { resize: none; min-height: 96px; max-height: 240px; overflow: auto; scrollbar-width: none; border-radius: 14px; }
+textarea::-webkit-scrollbar { display: none; }
 .setup { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; margin: 0 0 14px; }
 .setup label, .agents legend { font-weight: 800; font-size: 14px; }
 .hint { color: #5d7168; font-size: 13px; margin: 0; }
@@ -197,8 +199,8 @@ textarea { resize: none; min-height: 96px; max-height: 240px; overflow: auto; }
 .answer .q { font-weight: 800; font-size: 12px; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .answer p:not(.q) { margin: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .composer { flex: none; }
-.side .chat-history { flex: none; grid-template-columns: 1fr; margin: 0; max-height: 180px; background: var(--bg2); color: var(--cream); }
-.side .chat-history .answers { max-height: 140px; }
+.side .chat-history { flex: none; grid-template-columns: 1fr; margin: 0; max-height: 250px; background: var(--bg2); color: var(--cream); }
+.side .chat-history .answers { max-height: 210px; }
 .side .answer p:not(.q) { -webkit-line-clamp: 3; }
 .side .wordmark { margin: 0 0 6px; color: var(--cream); }
 .side .answer { background: rgba(255, 255, 255, 0.08); border-color: transparent; color: var(--cream); }

@@ -362,6 +362,7 @@ async function apply(message: StoryMsg, stale: () => boolean) {
   if (message.type === 'state') {
     if (!message.data.idea) { if (!view || !view.finished) showStart(); return; }
     view = normalize(message.data);
+    holdForAsk(view.ask?.id ?? null);
     shown = view.stage;
     picked = null;
     stageSince = performance.now();
@@ -417,16 +418,18 @@ async function apply(message: StoryMsg, stale: () => boolean) {
       view.ask = message.data;
       sound.ask();
       renderAsk();
+      holdForAsk(message.data.id);
       void speakAsk(message.data);
       break;
     case 'answered':
-      if (view.ask?.id === message.id) { view.ask = null; voice.hush(); ears.stop(); }
+      if (view.ask?.id === message.id) { view.ask = null; voice.stopCutIn(); ears.stop(); holdForAsk(null); }
       renderAsk();
       break;
     case 'finished':
       view.finished = message.data;
       view.running = false;
       view.ask = null;
+      holdForAsk(null);
       if (message.data.ok) {
         view.stage = 'done';
         if (!view.visited.includes('done')) view.visited.push('done');
@@ -814,6 +817,28 @@ function runCommand(command: Command, heard: string) {
   }
   void heard;
 }
+
+// While a question is on screen, the narration waits; it carries on from where it stopped once it is answered.
+let askHold: string | null = null;
+function holdForAsk(id: string | null) {
+  if (id && !askHold) voice.hold();
+  if (!id && askHold) voice.release();
+  askHold = id;
+}
+
+// While the person types a note, the narration waits, then carries on when they send it or click away.
+let typingHold = false;
+function holdForTyping(on: boolean) {
+  if (on === typingHold) return;
+  typingHold = on;
+  if (on) voice.hold(); else voice.release();
+}
+for (const id of ['#dock-text', '#idea']) {
+  const box = $<HTMLTextAreaElement>(id);
+  box.addEventListener('input', () => holdForTyping(box.value.trim().length > 0));
+  box.addEventListener('blur', () => holdForTyping(false));
+}
+$('#dock').addEventListener('submit', () => holdForTyping(false));
 
 function updateMics() {
   for (const button of document.querySelectorAll<HTMLButtonElement>('[data-dictate]')) button.hidden = !ears.ready;
