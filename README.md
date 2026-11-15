@@ -22,8 +22,9 @@ Built at sunhacks 2026.
 
 ## Run it
 
-You need [Node.js](https://nodejs.org) 20 or newer and [Claude Code](https://claude.com/claude-code)
-installed and signed in (running `claude` in a terminal should work).
+You need [Node.js](https://nodejs.org) 20 or newer and one builder installed and signed in:
+Claude Code (`claude`), Cursor's agent (`agent` or `cursor-agent`), or Codex (`codex`).
+Choose that builder and a project folder in Vibeerr. Each uses your existing login; no API key is required.
 
 ```bash
 npm install
@@ -31,7 +32,7 @@ npm start
 ```
 
 Open http://localhost:4321, type a question or what you want to build and press **Send**.
-No Claude Code on this computer? Press **Watch a demo build**: it replays a real recorded build.
+No builder on this computer? Press **Watch a demo build**: it replays a real recorded build.
 
 Optional: copy `.env.example` to `.env` and add a free `GEMINI_API_KEY` from
 https://aistudio.google.com/apikey. With the key, Gemini writes the explanations for your specific app.
@@ -60,6 +61,9 @@ web/ (Vite + TypeScript, SVG scenes) <── WebSocket: only friendly messages (
   to undo also asks first.
 - **Problems are part of the story.** When a check fails, the person sees "the builder found a problem
   and is fixing it" and the build walks back to the room that needs the fix.
+- **Cursor and Codex plan first.** They write the plan and stop while you edit it. After approval,
+  a second run builds the app. Codex runs in its project sandbox with interactive approvals disabled;
+  commands that require extra permission fail. Its progress and check results go through the guide.
 - **Changes.** On move-in day you can open the app and ask for a change in your own words.
 - **Local only.** The brain listens on 127.0.0.1 and refuses pages from other origins, because it can
   start a coding agent.
@@ -67,7 +71,7 @@ web/ (Vite + TypeScript, SVG scenes) <── WebSocket: only friendly messages (
 ## Folders
 
 - `shared/story.ts` the contract between brain and web: stages, lessons and message types.
-- `brain/` runner (starts Claude Code), hooks, stage rules, translator, story and server.
+- `brain/` runner (starts Claude, Cursor, or Codex), hooks, stage rules, translator, story and server.
 - `web/` start screen, stage windows, scenes, builder questions, sounds, and the recorded demo
   (`web/public/demo.jsonl`, `web/public/demo-app/`).
 - `runs/` recordings of your own builds (not committed). Copy one to `web/public/demo.jsonl` to make it the demo.

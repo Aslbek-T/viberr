@@ -5,6 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import type { AgentId } from '../../shared/story.ts';
 import { resolveAgent } from './agents.ts';
+import { codexArgs, parseCodexLine } from './codex.ts';
 import { ensureGuide, planMarkdown, writeBrief } from './brief.ts';
 import { CLAUDE_MODEL, PORT, ROOT } from './config.ts';
 import { isInstall, RISKY_CMD, TEST_CMD, type Raw } from './stages.ts';
@@ -192,6 +193,7 @@ class Runner {
 
   private launch(run: Run, kind: 'plan' | 'build' | 'continue') {
     const generation = ++this.generation;
+    run.result = undefined;
     const prompt = this.promptFor(run, kind);
     if (run.agent === 'claude') this.installHooks(run.dir);
     const args = this.argsFor(run, kind, prompt);
@@ -210,8 +212,15 @@ class Runner {
     else this.armWatch(run.dir);
     let stderr = '';
     child.stderr?.on('data', (d) => { stderr = (stderr + String(d)).slice(-2000); });
-    if (run.agent === 'claude' && child.stdout) {
-      readline.createInterface({ input: child.stdout }).on('line', (line) => this.onStreamLine(run, line));
+    if ((run.agent === 'claude' || run.agent === 'codex') && child.stdout) {
+      readline.createInterface({ input: child.stdout }).on('line', (line) => {
+        if (generation !== this.generation) return;
+        if (run.agent === 'codex') {
+          const event = parseCodexLine(line);
+          for (const step of event.steps) story.raw(step);
+          if (event.result && !run.result?.error) run.result = event.result;
+        } else this.onStreamLine(run, line);
+      });
     }
     child.on('error', (err) => {
       if (generation !== this.generation) return;
@@ -226,7 +235,7 @@ class Runner {
 
   private argsFor(run: Run, kind: 'plan' | 'build' | 'continue', prompt: string) {
     if (run.agent === 'codex') {
-      return ['exec', '--skip-git-repo-check', '--sandbox', 'workspace-write', '--approve-for-me', '-C', run.dir, prompt];
+      return codexArgs(run.dir, prompt);
     }
     // `--print` is the script mode. The prompt is a separate argument, not the value of -p.
     if (run.agent === 'cursor') {
@@ -245,7 +254,7 @@ class Runner {
   private promptFor(run: Run, kind: 'plan' | 'build' | 'continue') {
     if (!run.fresh && kind === 'build') {
       if (run.agent === 'claude' && run.resume) return run.idea;
-      return `The person wants this change:\n${run.idea}\n\nRead VIBEERR.md and PLAN.md. Make that change in the existing project. Update PROJECT_GUIDE.md so a developer can still understand the app after this change. Do not start over and do not delete VIBEERR.md or PROJECT_GUIDE.md.`;
+      return `The person wants this change:\n${run.idea}\n\n${CHANGE_RULES}`;
     }
     if (kind === 'plan' || (kind === 'continue' && !run.planApproved)) {
       return `The person asked for this:\n${run.idea}\n\nWrite only PLAN.md, then stop.\n${PLAN_SHAPE}\nIf VIBEERR.md exists, read it first. Do not delete it.`;
@@ -259,6 +268,8 @@ class Runner {
 
   private async onClose(run: Run, code: number | null, stderr: string) {
     if (this.run !== run) return;
+    this.watcher?.close();
+    this.watcher = undefined;
     if (this.switching) {
       const next = this.switching;
       const bin = this.nextBin;
@@ -273,6 +284,10 @@ class Runner {
       return;
     }
     if (run.phase === 'plan' && !run.stopped) {
+      if (code !== 0 || run.result?.error) {
+        await this.finishRun(run, code, stderr);
+        return;
+      }
       run.planText = this.readPlan(run) || run.planText;
       if (!run.planText?.trim()) {
         await story.finish({ ok: false, summary: `${this.label(run.agent)} stopped before writing a plan. Try again, or pick a different AI.` });
