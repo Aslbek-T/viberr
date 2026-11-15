@@ -1,13 +1,13 @@
 import Phaser from 'phaser';
 import type { ThemeId, UserProfile } from '../../shared/events.ts';
 import { Feed } from './net/socket.ts';
-import { BuildingScene, HEIGHT, WIDTH } from './scenes/Building.ts';
+import { BuildingScene, HEIGHT, RES, WIDTH } from './scenes/Building.ts';
 import { addStep, attachNarration, clearSteps, setBadge, setVoice, showCaption, showConcept, showDecision } from './ui/overlay.ts';
 import { loadProfile, runOnboarding, saveProfile } from './ui/onboarding.ts';
 
 const scene = new BuildingScene();
 new Phaser.Game({
-  type: Phaser.AUTO, parent: 'game', width: WIDTH, height: HEIGHT, backgroundColor: '#e8f4fb',
+  type: Phaser.AUTO, parent: 'game', width: WIDTH * RES, height: HEIGHT * RES, backgroundColor: '#e8f4fb',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_HORIZONTALLY },
   scene: [scene],
 });

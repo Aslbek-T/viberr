@@ -4,7 +4,7 @@ import { ROOMS } from '../../shared/events.ts';
 export interface RoomStats { files: string[]; edits: number; steps: number }
 
 const empty = (): Record<Room, RoomStats> =>
-  Object.fromEntries(ROOMS.map((r) => [r, { files: [], edits: 0, steps: 0 }])) as Record<Room, RoomStats>;
+  Object.fromEntries(ROOMS.map((r) => [r, { files: [], edits: 0, steps: 0 }])) as unknown as Record<Room, RoomStats>;
 
 /** What has been built so far in this session, per room. Feeds the room meters and the summary map. */
 class SessionStats {
