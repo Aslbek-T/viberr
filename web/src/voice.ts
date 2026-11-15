@@ -16,6 +16,8 @@ let audio: HTMLAudioElement | null = null;
 let playing: Promise<void> | null = null;
 let stopPlaying: (() => void) | null = null;
 let pending: { text: string; done: () => void } | null = null;
+/** Explanations wait their turn and are never dropped, unlike ordinary lines. */
+const queued: { text: string; done: () => void }[] = [];
 let token = 0;
 
 const clean = (text: string) => text.replace(/[“”]/g, '"').replace(/\s+/g, ' ').trim();
@@ -68,9 +70,10 @@ async function drain(first: string, done: () => void) {
     playing = play(text);
     await playing;
     finish();
-    if (!pending) break;
-    ({ text, done: finish } = pending);
-    pending = null;
+    const next = queued.shift() ?? pending;
+    if (!next) break;
+    if (next === pending) pending = null;
+    ({ text, done: finish } = next);
   }
   playing = null;
   stopPlaying = null;
@@ -89,15 +92,17 @@ export const voice = {
   },
   /**
    * Reads a line aloud. A normal line waits for the one being read, and only the newest waiting line is kept,
-   * so the voice never falls far behind the build. `urgent` (a question) cuts in at once.
+   * so the voice never falls far behind the build. `true` (a question) cuts in at once.
+   * 'queue' (an explanation) waits its turn and is never dropped.
    * Resolves when the line has been read, or skipped.
    */
-  say(text: string, urgent = false): Promise<void> {
+  say(text: string, how: boolean | 'queue' = false): Promise<void> {
     const words = clean(text);
     if (!on || !words) return Promise.resolve();
     return new Promise((resolve) => {
-      if (urgent) voice.hush();
+      if (how === true) voice.hush();
       if (playing) {
+        if (how === 'queue') { queued.push({ text: words, done: resolve }); return; }
         pending?.done();
         pending = { text: words, done: resolve };
         return;
@@ -110,6 +115,7 @@ export const voice = {
     token++;
     pending?.done();
     pending = null;
+    for (const item of queued.splice(0)) item.done();
     stopPlaying?.();
     try { window.speechSynthesis?.cancel(); } catch { /* ignore */ }
   },
@@ -203,3 +209,45 @@ export function matchAnswer(heard: string, labels: string[]): number | null {
   if (YES.test(said)) return 0;
   return null;
 }
+
+// ---------------------------------------------------------------- spoken commands
+
+export type Command =
+  | { kind: 'agent'; agent: 'claude' | 'cursor' | 'codex' }
+  | { kind: 'open-app' } | { kind: 'open-guide' } | { kind: 'stop' } | { kind: 'start-over' }
+  | { kind: 'voice'; on: boolean } | { kind: 'sound'; on: boolean }
+  | { kind: 'show'; stage: string } | { kind: 'where' } | { kind: 'summary' } | { kind: 'help' } | { kind: 'demo' };
+
+const STAGE_WORDS: [RegExp, string][] = [
+  [/\b(idea|plan)\b/, 'plan'], [/\b(start|setup|set up)\b/, 'setup'], [/\b(pages?|screens?|look)\b/, 'look'],
+  [/\b(actions?|logic)\b/, 'logic'], [/\b(saved|memory|storage)\b/, 'memory'], [/\b(try ?out|tests?|checks?)\b/, 'check'],
+  [/\b(done|finish|finished|ready)\b/, 'done'],
+];
+
+/**
+ * A short spoken command, or null when the words are a note or a question instead.
+ * Commands must start the sentence, so a note like "add a stop button" is never read as "stop".
+ */
+export function parseCommand(heard: string): Command | null {
+  const t = norm(heard).replace(/^(hey |ok |okay |please |can you |could you |vibeerr |viber )+/g, '').replace(/ please$/, '');
+  if (!t) return null;
+  const agent = t.match(/^(switch|change|use|go|move)( over)?( the (ai|builder|model))?( to| with)? (claude|cursor|codex)\b/);
+  if (agent) return { kind: 'agent', agent: agent[6] as 'claude' | 'cursor' | 'codex' };
+  if (/^(open|show|launch|run|try)( me)? (my|the|our)? ?(app|project|website|site|page)\b/.test(t)) return { kind: 'open-app' };
+  if (/^(open|show)( me)? (the )?(developer|dev|handoff)( guide)?\b/.test(t)) return { kind: 'open-guide' };
+  if (/^(stop|pause)( the)?( builder| building| build| it| now)*$/.test(t)) return { kind: 'stop' };
+  if (/^(start over|start again|reset|new project)\b/.test(t)) return { kind: 'start-over' };
+  const v = t.match(/^(turn )?(voice|talking|speaking)( on| off)\b|^(mute|be quiet|quiet|stop talking|unmute)\b/);
+  if (v) return { kind: 'voice', on: v[4] ? v[4] === 'unmute' : v[3] === ' on' };
+  const snd = t.match(/^(turn )?(the )?sounds?( on| off)\b/);
+  if (snd) return { kind: 'sound', on: snd[3] === ' on' };
+  if (/^(what'?s happening|what is happening|where are we|what are you doing|what is it doing|repeat|say that again)\b/.test(t)) return { kind: 'where' };
+  if (/^(read|tell me)( me)? (the )?(summary|result)\b/.test(t)) return { kind: 'summary' };
+  if (/^(help|what can i say|commands)\b/.test(t)) return { kind: 'help' };
+  if (/^(watch|play|show)( me)? (the |a )?demo\b/.test(t)) return { kind: 'demo' };
+  const show = t.match(/^(show|open|go to|take me to)( me)?( the)? (.+?)( part| district| step)?$/);
+  if (show) for (const [re, stage] of STAGE_WORDS) if (re.test(show[4])) return { kind: 'show', stage };
+  return null;
+}
+
+export const COMMAND_HELP = 'You can say: switch to Codex, open my app, open the developer guide, show the pages, what is happening, stop, or voice off. Anything else is sent as a note or a question.';

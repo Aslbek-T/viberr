@@ -101,7 +101,7 @@ export interface RunState {
 export type StoryMsg =
   | { type: 'state'; data: RunState }
   | { type: 'stage'; stage: StageId }
-  | { type: 'now'; stage: StageId; text: string }
+  | { type: 'now'; stage: StageId; text: string; explain?: boolean } // explain: a longer note while the builder is quiet; the screen waits for it
   | { type: 'task'; data: Task }
   | { type: 'block'; data: Block }
   | { type: 'ask'; data: Ask }

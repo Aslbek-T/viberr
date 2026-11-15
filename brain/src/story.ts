@@ -5,9 +5,12 @@ import type { AgentId, Ask, Block, ClientMsg, Finished, PlanSection, RecordedLin
 import { ASK_TIMEOUT_MS, RUNS_DIR } from './config.ts';
 import { newId } from './ids.ts';
 import { stageOf, type Raw } from './stages.ts';
-import { explainStage, narratorKind, translateStep, type BlockWords } from './translator.ts';
+import { explainPause, explainStage, narratorKind, translateStep, type BlockWords } from './translator.ts';
 
 const FLUSH_MS = 3500;
+/** After this long with nothing new to say, the guide explains the current part in more depth. */
+const QUIET_MS = 14_000;
+const ORDER: StageId[] = ['plan', 'setup', 'look', 'logic', 'memory', 'check', 'done'];
 
 /**
  * Turns the raw stream of agent activity into the story the person sees:
@@ -23,6 +26,8 @@ class Story {
   private record?: { file: string; start: number };
   private blockIds = new Map<string, string>(); // file -> block id; files never leave the brain
   private guideAt = new Map<StageId, number>();
+  private lastTalk = 0;
+  private quiet = new Map<StageId, number>(); // quiet-moment notes given per stage in this run
   /** The runner saves VIBEERR.md whenever the story moves forward. */
   onProgress: (() => void) | null = null;
 
@@ -75,9 +80,11 @@ class Story {
       ? 'Your builder is reading your idea and getting ready to write a short plan you can edit.'
       : 'Your builder is back and looking at what your change touches.');
     if (fresh) this.addTask('plan', 'Read your idea carefully');
+    this.quiet.clear();
     void this.fillGuide('plan');
+    void this.fillGuide('setup', true);
     clearInterval(this.timer);
-    this.timer = setInterval(() => void this.flush(), FLUSH_MS);
+    this.timer = setInterval(() => void this.flush().then(() => this.explainIfQuiet()), FLUSH_MS);
   }
 
   /** Feed one raw step from the agent. */
@@ -86,9 +93,28 @@ class Story {
     this.buffer.push(r);
   }
 
-  say(text: string) {
+  say(text: string, explain = false) {
     this.state.now = text;
-    this.send({ type: 'now', stage: this.state.stage, text });
+    this.lastTalk = Date.now();
+    this.send(explain ? { type: 'now', stage: this.state.stage, text, explain } : { type: 'now', stage: this.state.stage, text });
+  }
+
+  /** When the builder has been quiet for a while (a bigger piece of work), the guide explains this part more deeply. */
+  private async explainIfQuiet() {
+    const stage = this.state.stage;
+    const given = this.quiet.get(stage) ?? 0;
+    if (!this.state.running || this.state.ask || this.busy || this.buffer.length || stage === 'done') return;
+    if (Date.now() - this.lastTalk < QUIET_MS || given >= 2) return;
+    this.busy = true;
+    try {
+      this.quiet.set(stage, given + 1);
+      const text = await explainPause(this.state.idea ?? '', stage, this.state.tasks.map((t) => t.text),
+        this.state.blocks.map((b) => b.name), given);
+      // Only speak if nothing new happened while the note was being written.
+      if (this.state.running && !this.state.ask && this.state.stage === stage && !this.buffer.length) this.say(text, true);
+    } finally {
+      this.busy = false;
+    }
   }
 
   private setStage(stage: StageId) {
@@ -96,7 +122,10 @@ class Story {
     this.state.stage = stage;
     if (!this.state.visited.includes(stage)) this.state.visited.push(stage);
     this.send({ type: 'stage', stage });
-    void this.fillGuide(stage);
+    void this.fillGuide(stage, true);
+    // Write the next part's note now, so it is ready to be read the moment the builder arrives there.
+    const next = ORDER[ORDER.indexOf(stage) + 1];
+    if (next) void this.fillGuide(next, true);
   }
 
   /** Adds a finished job to a stage's list. */
@@ -237,7 +266,8 @@ class Story {
     this.send({ type: 'state', data: this.state });
   }
 
-  private async fillGuide(stage: StageId) {
+  private async fillGuide(stage: StageId, onlyIfMissing = false) {
+    if (onlyIfMissing && this.state.guides[stage]) return;
     const token = (this.guideAt.get(stage) ?? 0) + 1;
     this.guideAt.set(stage, token);
     const text = await explainStage(this.state.idea ?? '', stage);
@@ -247,6 +277,7 @@ class Story {
   }
 
   private clearAsk(id: string, option: number | null) {
+    this.lastTalk = Date.now(); // give the builder a moment to get going again before a quiet-moment note
     if (this.state.ask?.id === id) this.state.ask = null;
     this.send({ type: 'answered', id, option });
   }

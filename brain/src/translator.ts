@@ -236,6 +236,51 @@ function guideLine(stage: StageId, idea: string): string {
   return lines[stage];
 }
 
+/** Deeper notes for quiet moments, when the builder is busy with a bigger piece and nothing new has happened. */
+const DEEPER: Record<StageId, string[]> = {
+  plan: [
+    'While the builder thinks, here is why a plan comes first: it is much cheaper to change a sentence now than a finished screen later.',
+    'A good plan names what you do, what you see, and what the app remembers. Those three parts become the districts on this site.',
+  ],
+  setup: [
+    'The builder is still preparing. This part is like labeling the drawers before filling them, so every later piece knows where to go.',
+    'Nothing here shows up in your app, but it tells any computer how to open and check your app later.',
+  ],
+  look: [
+    'The builder is working on a bigger page right now. Pages only show things; when you tap, they hand the job to the actions.',
+    'Good pages use short labels and one clear button per job. That is what makes an app feel easy the first time.',
+  ],
+  logic: [
+    'This is the thinking part of the app, so it takes a little longer. Each action takes what you typed, decides what to do, and updates the page.',
+    'Actions are written as small named steps, like add a reading or work out growth, so a later change only touches one step.',
+  ],
+  memory: [
+    'The builder is making sure nothing is lost when you close the page. The actions hand information here, and it comes back next time you open the app.',
+    'Saving well means choosing what to keep. Your app keeps only what you would want to look up again.',
+  ],
+  check: [
+    'The builder is trying your app with made-up examples, like a test drive. If an answer comes out wrong, it fixes the part and tries again.',
+    'These tries stay with your app, so any later change is checked the same way before you see it.',
+  ],
+  done: ['Your app is ready. You can open it, ask for a change, or ask what any part does.'],
+};
+
+/** A longer note for a quiet moment in one stage. `n` counts the notes already given in this stage. */
+export async function explainPause(idea: string, stage: StageId, done: string[], parts: string[], n: number): Promise<string> {
+  const pool = DEEPER[stage];
+  const fallback = pool[n % pool.length];
+  const info = stageInfo(stage);
+  const out = await gemini(`The person asked for: "${idea}"
+The builder is in the part called "${info.name}" (${info.real}) and has been quiet for a while because it is working on a bigger piece.
+Finished so far: ${done.slice(-6).join('; ') || 'nothing yet'}
+Parts of the app so far: ${parts.slice(-6).join(', ') || 'none yet'}
+${n ? 'You already explained this part once, so explain a different side of it.' : ''}
+Reply with JSON: {"text": string}
+2 sentences, max 40 words together, spoken aloud by a calm guide. Explain what the builder is most likely working on now in THEIR app,
+and how this part connects to the other parts. If you use a technical word, explain it in the same sentence. No file names, no code.`, 8000);
+  return clean(out?.text, 320) || fallback;
+}
+
 /** The closing words on the Ready screen. */
 export async function translateFinish(idea: string, resultText: string, tasks: string[], ok: boolean, change = false): Promise<string> {
   const fallback = !ok ? 'The builder stopped before finishing. You can ask it to continue or describe what you want changed.'
