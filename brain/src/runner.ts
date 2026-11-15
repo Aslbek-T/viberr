@@ -13,8 +13,24 @@ import { translateFinish, translatePlan } from './translator.ts';
 
 const RULES = `You are building a small app for a person who does not code. They never see code or this
 conversation: a separate guide explains your work to them. Follow these rules.
-1. FIRST write PLAN.md: a title line, then 3 to 5 short bullets saying in everyday words what the app will
-   let them do. No technical words in PLAN.md.
+1. FIRST write PLAN.md, the real and complete plan, in everyday words a non-coder understands (no file names,
+   no code, no tool names; if you need a real term like "frontend" or "database", explain it in the same line).
+   Use EXACTLY this layout:
+   # <a friendly name for the app>
+   <one sentence: what the app is and who it is for>
+   ## What you will be able to do
+   (3 to 6 bullets, every feature)
+   ## The screens
+   (one bullet per screen or area of the page: what is on it)
+   ## What happens when you tap
+   (one bullet per rule, like "Tapping Add puts the chore on the list with its points")
+   ## What it remembers
+   (what information is kept, and that it is still there after closing the page)
+   ## How I will check it works
+   (the automatic checks you will write, in plain words)
+   ## The parts I will build
+   (one bullet per part, starting with its district: "Toolbox:", "Screens:", "Rules:", "Memory:" or "Checks:",
+   then a 2 or 3 word name and what it does, e.g. "Rules: Point counter - adds up each person's points")
 2. Then build the smallest version that works, as a web page that opens straight from index.html with no
    server and no build step, unless they clearly ask for something else. Create the files in EXACTLY this
    order, one after the other, finishing each before starting the next:
@@ -24,13 +40,17 @@ conversation: a separate guide explains your work to them. Follow these rules.
    d) storage.js: saving and loading the information in the browser (for example savePlants, loadPlants)
    e) tests.js: a few simple checks of the logic, each with a plain-English name, that run with "node tests.js"
 3. Run the checks once and fix any problem.
-4. Do not ask questions; make sensible choices. Do not start servers or long-running commands.
+4. LAST, write PROJECT_GUIDE.md for a developer who joins later: what the app does, how to open it and run the
+   checks, every file and what it is responsible for, how the parts talk to each other (screen -> rules -> memory),
+   where the information is stored and in what shape, and 3 good next steps. Keep it short and concrete.
+5. Do not ask questions; make sensible choices. Do not start servers or long-running commands.
    Do not install packages unless truly needed. Stay inside the current folder.
-5. Finish with 2 or 3 friendly sentences on what the app does and how to use it, with no technical words.`;
+6. Finish with 2 or 3 friendly sentences on what the app does and how to use it, with no technical words.`;
 
 const CHANGE_RULES = `The person who owns this app does not code and asks for a change. Make the change in the
 existing files, keep the app opening straight from index.html, update tests.js if the logic changed, run
-"node tests.js" once, and finish with 1 or 2 friendly sentences on what changed, with no technical words.
+"node tests.js" once, update PROJECT_GUIDE.md so it still matches the app, and finish with 1 or 2 friendly
+sentences on what changed, with no technical words.
 Do not ask questions. Do not start servers. Stay inside the current folder.`;
 
 interface Run {
@@ -116,11 +136,14 @@ class Runner {
     console.log(`[run] finished (exit ${code}, ok=${ok})`);
     if (!ok && !run.stopped) console.error('[run] ' + (run.result?.text || stderr || 'no output').slice(0, 600));
     const hasPage = fs.existsSync(path.join(run.dir, 'index.html'));
+    const hasGuide = fs.existsSync(path.join(run.dir, 'PROJECT_GUIDE.md'));
     let summary: string;
     if (run.stopped) summary = 'You stopped the builder. Nothing more was changed. Describe what you would like instead and start again.';
     else if (!ok) summary = 'The builder ran into a problem and stopped. Check the terminal where Buildscape is running for details, then try again.';
     else summary = await translateFinish(run.idea, run.result?.text ?? '', story.state.tasks.map((t) => t.text), true, !run.fresh);
-    await story.finish({ ok, summary, previewUrl: ok && hasPage ? `/preview/index.html?v=${Date.now().toString(36)}` : undefined });
+    const v = Date.now().toString(36);
+    await story.finish({ ok, summary, previewUrl: ok && hasPage ? `/preview/index.html?v=${v}` : undefined,
+      handoffUrl: ok && hasGuide ? `/handoff?v=${v}` : undefined });
   }
 
   // ---------------------------------------------------------------- hooks
@@ -193,12 +216,13 @@ class Runner {
 
   private async askPlan(run: Run): Promise<boolean> {
     await story.flushNow(); // put the planning work into words before asking
-    const bullets = await translatePlan(run.idea, run.planText ?? '');
+    const plan = await translatePlan(run.idea, run.planText ?? '');
     const choice = await story.ask({
-      question: 'Here is the plan for your app. Shall I start building?',
-      details: bullets,
+      question: plan.title ? `Here is the plan for "${plan.title}". Shall I start building?` : 'Here is the plan for your app. Shall I start building?',
+      summary: plan.summary || undefined,
+      sections: plan.sections,
       options: [
-        { label: 'Yes, build it', explain: 'The builder starts with the foundation.' },
+        { label: 'Yes, build it', explain: 'The builder fills the toolbox, then places the blocks district by district.' },
         { label: 'Not yet', explain: 'The builder stops so you can describe your idea differently.' },
       ],
       recommended: 0,

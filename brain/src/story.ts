@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { WebSocket } from 'ws';
-import type { Ask, ClientMsg, Finished, RecordedLine, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
+import type { Ask, Block, ClientMsg, Finished, RecordedLine, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
 import { ASK_TIMEOUT_MS, RUNS_DIR } from './config.ts';
 import { newId } from './ids.ts';
 import { stageOf, type Raw } from './stages.ts';
-import { narratorKind, translateStep } from './translator.ts';
+import { narratorKind, translateStep, type BlockWords } from './translator.ts';
 
 const FLUSH_MS = 3500;
 
@@ -21,9 +21,10 @@ class Story {
   private busy = false;
   private pending = new Map<string, { resolve: (o: number | null) => void; timer: NodeJS.Timeout }>();
   private record?: { file: string; start: number };
+  private blockIds = new Map<string, string>(); // file -> block id; files never leave the brain
 
   private blank(): RunState {
-    return { idea: null, running: false, stage: 'plan', visited: [], tasks: [], now: '', ask: null, finished: null, narrator: narratorKind() };
+    return { idea: null, running: false, stage: 'plan', visited: [], tasks: [], blocks: [], now: '', ask: null, finished: null, narrator: narratorKind() };
   }
 
   // ---------------------------------------------------------------- browsers
@@ -54,7 +55,9 @@ class Story {
   /** `fresh` is false when the person asks for a change to the app they already built. */
   start(idea: string, slug: string, fresh: boolean) {
     const keep = fresh ? [] : this.state.tasks;
-    this.state = { ...this.blank(), idea, running: true, tasks: keep, visited: fresh ? ['plan'] : this.state.visited, stage: 'plan' };
+    if (fresh) this.blockIds.clear();
+    this.state = { ...this.blank(), idea, running: true, tasks: keep, blocks: fresh ? [] : this.state.blocks,
+      visited: fresh ? ['plan'] : this.state.visited, stage: 'plan' };
     this.buffer = [];
     fs.mkdirSync(RUNS_DIR, { recursive: true });
     this.record = { file: path.join(RUNS_DIR, `${slug}-${Date.now().toString(36)}.jsonl`), start: Date.now() };
@@ -62,8 +65,8 @@ class Story {
     // The recording starts with the state so a replay can begin from a clean screen.
     fs.appendFileSync(this.record.file, JSON.stringify({ t: 0, msg: { type: 'state', data: this.state } }) + '\n');
     this.say(fresh
-      ? 'Your builder is reading your idea and getting the blueprint paper out.'
-      : 'Your builder is back on site and looking at what you want changed.');
+      ? 'Your builder is reading your idea and getting ready to write the plan.'
+      : 'Your builder is back on site and looking at which blocks your change touches.');
     if (fresh) this.addTask('plan', 'Read your idea carefully');
     clearInterval(this.timer);
     this.timer = setInterval(() => void this.flush(), FLUSH_MS);
@@ -121,12 +124,32 @@ class Story {
         const words = await translateStep(this.state.idea ?? '', part.stage, part.items, this.state.tasks.map((t) => t.text));
         if (!this.state.running) return;
         this.say(words.now);
+        for (const b of words.blocks) this.block(part.stage, b);
         if (meaningful) for (const t of words.tasks) this.addTask(part.stage, t);
         if (part.items.some((r) => r.kind === 'problem')) this.problem('The builder found a problem and is fixing it.');
       }
     } finally {
       this.busy = false;
     }
+  }
+
+  /** A part of the app was made or improved: add its block, or raise it by one level. */
+  private block(stage: StageId, w: BlockWords) {
+    if (/\.md$|(^|\/)\./i.test(w.file) || stage === 'plan' || stage === 'done') return;
+    const id = this.blockIds.get(w.file);
+    const old = id ? this.state.blocks.find((b) => b.id === id) : undefined;
+    const block: Block = old ? { ...old, level: Math.min(old.level + 1, 4), does: w.does || old.does }
+      : { id: newId('b_'), stage, name: w.name, does: w.does, level: 1 };
+    this.blockIds.set(w.file, block.id);
+    this.state.blocks = old ? this.state.blocks.map((b) => (b.id === block.id ? block : b)) : [...this.state.blocks, block];
+    this.send({ type: 'block', data: block });
+  }
+
+  /** How the app is put together, district by district, for the Ready screen. */
+  structure(): NonNullable<Finished['structure']> {
+    const order: StageId[] = ['look', 'logic', 'memory', 'check', 'setup'];
+    return order.map((stage) => ({ stage, parts: this.state.blocks.filter((b) => b.stage === stage).map((b) => ({ name: b.name, does: b.does })) }))
+      .filter((d) => d.parts.length);
   }
 
   /** Put whatever is waiting into words right now. */
@@ -138,13 +161,14 @@ class Story {
   async finish(done: Finished) {
     clearInterval(this.timer);
     await this.flushNow();
+    if (done.ok) done = { ...done, structure: this.structure() };
     for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve(null); }
     this.pending.clear();
     this.state.ask = null;
     this.state.running = false;
     if (done.ok) this.setStage('done');
     this.state.finished = done;
-    this.state.now = done.ok ? 'Move-in day. Your app is ready.' : 'The builder has stopped.';
+    this.state.now = done.ok ? 'Your app is ready. Every block is in place.' : 'The builder has stopped.';
     this.send({ type: 'now', stage: this.state.stage, text: this.state.now });
     this.send({ type: 'finished', data: done });
     this.record = undefined;

@@ -1,44 +1,49 @@
-{"t":0,"msg":{"type":"state","data":{"idea":"An app to track how tall my plants grow","running":true,"stage":"plan","visited":["plan"],"tasks":[],"now":"","ask":null,"finished":null,"narrator":"template"}}}
-{"t":0,"msg":{"type":"now","stage":"plan","text":"Your builder is reading your idea and getting the blueprint paper out."}}
-{"t":1,"msg":{"type":"task","data":{"id":"t_mwhgluxw0","stage":"plan","text":"Read your idea carefully"}}}
-{"t":7002,"msg":{"type":"now","stage":"plan","text":"Your builder is reading your idea and drawing the blueprint: a short list of what your app should do."}}
-{"t":7002,"msg":{"type":"task","data":{"id":"t_mwhgm0ce1","stage":"plan","text":"Wrote down the plan for your app"}}}
-{"t":8303,"msg":{"type":"ask","data":{"question":"Here is the plan for your app. Shall I start building?","details":["Add each of your plants with a name","Write down how tall a plant is whenever you measure it","See how much each plant has grown since you started, with a simple growth picture","Remove a plant or a measurement you no longer want","Everything is remembered the next time you open the page"],"options":[{"label":"Yes, build it","explain":"The builder starts with the foundation."},{"label":"Not yet","explain":"The builder stops so you can describe your idea differently."}],"recommended":0,"id":"ask_mwhgm1ci2"}}}
-{"t":10534,"msg":{"type":"answered","id":"ask_mwhgm1ci2","option":0}}
-{"t":10534,"msg":{"type":"task","data":{"id":"t_mwhgm32i3","stage":"plan","text":"You approved the plan"}}}
-{"t":14004,"msg":{"type":"stage","stage":"setup"}}
-{"t":14004,"msg":{"type":"now","stage":"setup","text":"The foundation is going in. Nothing is visible yet, but everything else will stand on it."}}
-{"t":14004,"msg":{"type":"task","data":{"id":"t_mwhgm5qw4","stage":"setup","text":"Gave your project a name and a home"}}}
-{"t":14004,"msg":{"type":"task","data":{"id":"t_mwhgm5qw5","stage":"setup","text":"Got the toolbox ready for checking the work later"}}}
-{"t":21004,"msg":{"type":"stage","stage":"look"}}
-{"t":21006,"msg":{"type":"now","stage":"look","text":"The walls and windows are going up: these are the screens you will see and touch."}}
-{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e6","stage":"look","text":"Built the main screen: Plant Growth Tracker"}}}
-{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e7","stage":"look","text":"Added the \"Add plant\" button"}}}
-{"t":21006,"msg":{"type":"task","data":{"id":"t_mwhgmb5e8","stage":"look","text":"Added the \"Remove plant\" button"}}}
-{"t":31503,"msg":{"type":"now","stage":"look","text":"Your builder is shaping what the app looks like. Developers call this part the \"frontend\"."}}
-{"t":31503,"msg":{"type":"task","data":{"id":"t_mwhgmj8z9","stage":"look","text":"Chose the colors and the layout"}}}
-{"t":49004,"msg":{"type":"stage","stage":"logic"}}
-{"t":49006,"msg":{"type":"now","stage":"logic","text":"Now the wiring: the rules that decide what happens when you tap a button."}}
-{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6a","stage":"logic","text":"Taught the app how to add a plant"}}}
-{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6b","stage":"logic","text":"Taught the app how to remove a plant"}}}
-{"t":49006,"msg":{"type":"task","data":{"id":"t_mwhgmwr6c","stage":"logic","text":"Taught the app how to sort by date"}}}
-{"t":52504,"msg":{"type":"stage","stage":"memory"}}
-{"t":52506,"msg":{"type":"now","stage":"memory","text":"The app is learning to remember things. The place where information is kept is called a \"database\"."}}
-{"t":52506,"msg":{"type":"task","data":{"id":"t_mwhgmzged","stage":"memory","text":"Made a safe place to keep your information"}}}
-{"t":52506,"msg":{"type":"task","data":{"id":"t_mwhgmzgee","stage":"memory","text":"Taught the app to remember your plants"}}}
-{"t":63005,"msg":{"type":"stage","stage":"check"}}
-{"t":63005,"msg":{"type":"now","stage":"check","text":"Inspection time: your builder is running small automatic checks to make sure everything works."}}
-{"t":63005,"msg":{"type":"task","data":{"id":"t_mwhgn7k1f","stage":"check","text":"Wrote checks for the important parts"}}}
-{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2g","stage":"check","text":"Check: Adding a plant puts it in the list"}}}
-{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2h","stage":"check","text":"Check: A plant with a blank name is not added"}}}
-{"t":63006,"msg":{"type":"task","data":{"id":"t_mwhgn7k2i","stage":"check","text":"Ran all the checks"}}}
-{"t":63006,"msg":{"type":"problem","text":"The builder found a problem and is fixing it."}}
-{"t":66505,"msg":{"type":"stage","stage":"logic"}}
-{"t":66505,"msg":{"type":"now","stage":"logic","text":"Your builder is connecting the buttons to what they should do. You never see this part, but nothing works without it."}}
-{"t":66505,"msg":{"type":"task","data":{"id":"t_mwhgna99j","stage":"logic","text":"Connected the buttons to what they do"}}}
-{"t":70006,"msg":{"type":"stage","stage":"check"}}
-{"t":70007,"msg":{"type":"now","stage":"check","text":"Inspection time: your builder is running small automatic checks to make sure everything works."}}
-{"t":70007,"msg":{"type":"task","data":{"id":"t_mwhgncyjk","stage":"check","text":"Every check passed"}}}
-{"t":73726,"msg":{"type":"stage","stage":"done"}}
-{"t":73726,"msg":{"type":"now","stage":"done","text":"Move-in day. Your app is ready."}}
-{"t":73726,"msg":{"type":"finished","data":{"ok":true,"summary":"Your app is ready. The builder finished 20 jobs, from the blueprint to the final inspection. Open it and try it out, then ask for any change you like.","previewUrl":"/preview/index.html?v=mwhgnftt"}}}
+{"t":0,"msg":{"type":"state","data":{"idea":"An app to track how tall my plants grow","running":true,"stage":"plan","visited":["plan"],"tasks":[],"blocks":[],"now":"","ask":null,"finished":null,"narrator":"gemini"}}}
+{"t":0,"msg":{"type":"now","stage":"plan","text":"Your builder is reading your idea and getting ready to write the plan."}}
+{"t":200,"msg":{"type":"task","data":{"id":"t_demo0","stage":"plan","text":"Read your idea carefully"}}}
+{"t":2700,"msg":{"type":"now","stage":"plan","text":"Your builder is writing the plan: what you can do, which screens you see and what it remembers."}}
+{"t":5200,"msg":{"type":"task","data":{"id":"t_demo1","stage":"plan","text":"Wrote down the full plan for your app"}}}
+{"t":6100,"msg":{"type":"ask","data":{"id":"ask_demo2","question":"Here is the plan for \"Sprout Tracker\". Shall I start building?","summary":"A simple page where you keep a list of your plants and write down how tall they are, so you can watch them grow.","sections":[{"title":"What you will be able to do","items":["Add each of your plants with a name","Write down how tall a plant is whenever you measure it, with the date","See how much each plant has grown since you started","See a small growth picture for every plant","Remove a plant or a measurement you no longer want"]},{"title":"The screens","items":["One page with a box at the top to add a new plant","A card for each plant with its latest height and a small growth chart","Inside each card, a box to type a new height and a list of past measurements"]},{"title":"What happens when you tap","items":["Tapping Add plant puts a new card on the page","Tapping Save height adds the measurement with today's date and updates the chart","The growth number is worked out as the newest height minus the first one","Tapping Remove asks the app to forget that plant or measurement"]},{"title":"What it remembers","items":["Every plant and every measurement","Everything is kept in your browser, so it is still there after you close the page"]},{"title":"How I will check it works","items":["Adding a plant really adds it","Growth is worked out correctly, even with only one measurement","Removing a measurement updates the growth number"]},{"title":"The parts I will build","items":["Toolbox: Project card - the app's name and how to run the checks","Screens: Main screen - the page with the plant cards","Screens: Colors and layout - friendly green colors that also fit a phone","Rules: Growth rules - adding plants, saving heights and working out growth","Memory: Memory box - saving and loading your plants","Checks: Automatic checks - trying the growth rules with example plants"]}],"options":[{"label":"Yes, build it","explain":"The builder fills the toolbox, then places the blocks district by district."},{"label":"Not yet","explain":"The builder stops so you can describe your idea differently."}],"recommended":0}}}
+{"t":8100,"msg":{"type":"answered","id":"ask_demo2","option":0}}
+{"t":8200,"msg":{"type":"task","data":{"id":"t_demo3","stage":"plan","text":"You approved the plan"}}}
+{"t":9000,"msg":{"type":"stage","stage":"setup"}}
+{"t":9600,"msg":{"type":"now","stage":"setup","text":"Your builder is filling the toolbox: giving the project a name, a folder and its tools."}}
+{"t":10300,"msg":{"type":"block","data":{"id":"b_demo4","stage":"setup","name":"Project card","does":"Holds the app's name and how to run its checks. Every tool looks here first.","level":1}}}
+{"t":11200,"msg":{"type":"task","data":{"id":"t_demo5","stage":"setup","text":"Gave your project a name and a home"}}}
+{"t":11800,"msg":{"type":"task","data":{"id":"t_demo6","stage":"setup","text":"Got the toolbox ready for checking the work later"}}}
+{"t":12600,"msg":{"type":"stage","stage":"look"}}
+{"t":13200,"msg":{"type":"now","stage":"look","text":"Your builder is placing blocks in the Screens district: the page where your plant cards will live."}}
+{"t":13900,"msg":{"type":"block","data":{"id":"b_demo7","stage":"look","name":"Main screen","does":"The page you see: a box to add a plant and a card for each one. Your taps go from here to the rules.","level":1}}}
+{"t":14800,"msg":{"type":"task","data":{"id":"t_demo8","stage":"look","text":"Built the main screen: Sprout Tracker"}}}
+{"t":15300,"msg":{"type":"task","data":{"id":"t_demo9","stage":"look","text":"Added the \"Add plant\" button"}}}
+{"t":15800,"msg":{"type":"task","data":{"id":"t_demoa","stage":"look","text":"Added a box to type a new height"}}}
+{"t":17000,"msg":{"type":"now","stage":"look","text":"Now the colors and the layout, so it feels calm and fits on a phone screen too."}}
+{"t":17700,"msg":{"type":"block","data":{"id":"b_demob","stage":"look","name":"Colors and layout","does":"Decides the green colors, the card shapes and the spacing, and makes the page fit a phone.","level":1}}}
+{"t":18600,"msg":{"type":"task","data":{"id":"t_democ","stage":"look","text":"Chose the colors and the layout"}}}
+{"t":19100,"msg":{"type":"task","data":{"id":"t_demod","stage":"look","text":"Made it fit on a phone screen too"}}}
+{"t":19900,"msg":{"type":"stage","stage":"logic"}}
+{"t":20500,"msg":{"type":"now","stage":"logic","text":"Now the Rules district: what should happen when you tap each button. Screens pass your taps to these rules."}}
+{"t":21200,"msg":{"type":"block","data":{"id":"b_demoe","stage":"logic","name":"Growth rules","does":"Adds plants and heights, works out how much each plant grew, and asks the memory box to save it.","level":1}}}
+{"t":22100,"msg":{"type":"task","data":{"id":"t_demof","stage":"logic","text":"Taught the app how to add a plant"}}}
+{"t":22700,"msg":{"type":"task","data":{"id":"t_demog","stage":"logic","text":"Taught the app how to work out growth"}}}
+{"t":23300,"msg":{"type":"task","data":{"id":"t_demoh","stage":"logic","text":"Taught the app how to draw the growth chart"}}}
+{"t":24100,"msg":{"type":"stage","stage":"memory"}}
+{"t":24700,"msg":{"type":"now","stage":"memory","text":"Your builder is building the Memory district, so your plants are still there tomorrow."}}
+{"t":25400,"msg":{"type":"block","data":{"id":"b_demoi","stage":"memory","name":"Memory box","does":"Saves your plants and measurements in the browser and loads them again when you come back.","level":1}}}
+{"t":26300,"msg":{"type":"task","data":{"id":"t_demoj","stage":"memory","text":"Made a safe place to keep your information"}}}
+{"t":26900,"msg":{"type":"task","data":{"id":"t_demok","stage":"memory","text":"Taught the app to remember your plants"}}}
+{"t":28100,"msg":{"type":"now","stage":"memory","text":"The rules now save into this memory after every change, and load from it when the page opens."}}
+{"t":28900,"msg":{"type":"stage","stage":"check"}}
+{"t":29500,"msg":{"type":"now","stage":"check","text":"Checks time: your builder is writing small automatic tests that try the rules with example plants."}}
+{"t":30200,"msg":{"type":"block","data":{"id":"b_demol","stage":"check","name":"Automatic checks","does":"Tries the growth rules with example plants and shouts if any answer is wrong.","level":1}}}
+{"t":31100,"msg":{"type":"task","data":{"id":"t_demom","stage":"check","text":"Wrote checks for the important parts"}}}
+{"t":31700,"msg":{"type":"task","data":{"id":"t_demon","stage":"check","text":"Check: growth is newest height minus first"}}}
+{"t":33200,"msg":{"type":"task","data":{"id":"t_demoo","stage":"check","text":"Ran all the checks"}}}
+{"t":34000,"msg":{"type":"problem","text":"The builder found a problem and is fixing it."}}
+{"t":34300,"msg":{"type":"now","stage":"check","text":"One check failed: growth with a single measurement was wrong. Your builder is going back to the rules to fix it."}}
+{"t":35800,"msg":{"type":"block","data":{"id":"b_demoe","stage":"logic","name":"Growth rules","does":"Adds plants and heights, works out growth (zero when there is only one measurement) and asks the memory box to save it.","level":2}}}
+{"t":36200,"msg":{"type":"task","data":{"id":"t_demop","stage":"check","text":"Found a problem and went back to fix it"}}}
+{"t":38000,"msg":{"type":"task","data":{"id":"t_demoq","stage":"check","text":"Every check passed"}}}
+{"t":39500,"msg":{"type":"stage","stage":"done"}}
+{"t":39500,"msg":{"type":"now","stage":"done","text":"Your app is ready. Every block is in place."}}
+{"t":39500,"msg":{"type":"finished","data":{"ok":true,"summary":"Sprout Tracker is ready. Add your plants, type a height whenever you measure one, and watch the growth chart climb. Everything is remembered next time you open it.","previewUrl":"demo-app/index.html","handoffUrl":"demo-app/guide.html","structure":[{"stage":"look","parts":[{"name":"Main screen","does":"The page you see: a box to add a plant and a card for each one. Your taps go from here to the rules."},{"name":"Colors and layout","does":"Decides the green colors, the card shapes and the spacing, and makes the page fit a phone."}]},{"stage":"logic","parts":[{"name":"Growth rules","does":"Adds plants and heights, works out growth (zero when there is only one measurement) and asks the memory box to save it."}]},{"stage":"memory","parts":[{"name":"Memory box","does":"Saves your plants and measurements in the browser and loads them again when you come back."}]},{"stage":"check","parts":[{"name":"Automatic checks","does":"Tries the growth rules with example plants and shouts if any answer is wrong."}]},{"stage":"setup","parts":[{"name":"Project card","does":"Holds the app's name and how to run its checks. Every tool looks here first."}]}]}}}

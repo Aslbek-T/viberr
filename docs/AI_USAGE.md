@@ -12,3 +12,4 @@ sunhacks asks teams to credit AI use. One line per meaningful piece of work: `- 
 - Claude Code: is the builder inside the product, and built the demo app in web/public/demo-app/ during a recorded run
 - Gemini (optional, free tier): writes the plain-language explanations at run time
 - Ideas for the builder character, stages and color mood came from our teammate's prototype built with Codex: https://github.com/DevBehruz/vibeerr
+- Claude (in a Claude project): block-site redesign with walking builder, one chat box that routes questions vs builds, full plain-language plan card, structure summary and developer handoff (web/src/world.ts, web/src/main.ts, brain/src/router.ts, brain/src/runner.ts, brain/src/story.ts, brain/src/translator.ts, shared/story.ts, scripts/make-demo.mjs)

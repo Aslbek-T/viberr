@@ -1,7 +1,7 @@
-import { STAGES, stageInfo, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
+import { STAGES, stageInfo, type Block, type MessageReply, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
 import { sound } from './audio.ts';
 import { demo, live, type Feed } from './net.ts';
-import { builder, scene, setSteps } from './scenes.ts';
+import { builder, World } from './world.ts';
 import './styles.css';
 
 // The whole screen is driven by the friendly story messages from the brain (shared/story.ts).
@@ -11,17 +11,19 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySe
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, reduced ? Math.min(ms, 120) : ms));
-const MIN_STAGE_MS = 5000; // every stage window stays up at least this long, even when the builder is fast
+const MIN_STAGE_MS = 2500; // every district gets at least this long on screen, even when the builder is fast
 
 const EXAMPLES = [
-  'An app to track how tall my plants grow',
   'A chore chart for my family with points',
+  'An app to track how tall my plants grow',
+  'What is the difference between frontend and backend?',
   'A tip calculator that splits the bill between friends',
-  'A reading list where I can rate the books I finish',
+  'What is a database, in simple words?',
 ];
 
 let view: RunState | null = null;      // what is on screen (follows the brain a few seconds behind, on purpose)
-let shown: StageId = 'plan';           // which stage window is open
+let shown: StageId = 'plan';           // which stage the side panel explains
+let picked: Block | null = null;       // a block the person clicked
 let source: 'live' | 'demo' = 'live';
 let online = false;
 let lastLive: RunState | null = null;  // the brain's latest state, kept while the demo plays
@@ -36,18 +38,19 @@ $('#app').innerHTML = `
   <div class="start-card">
     <div class="logo" aria-hidden="true"><svg viewBox="-40 -40 80 110">${builder(0, 0, 1)}</svg></div>
     <p class="eyebrow">Buildscape</p>
-    <h1>What do you want to build?</h1>
-    <p class="lead">Describe your idea in your own words. A builder makes the app for you, and you watch it go up like a house: one stage at a time, explained in plain language. No coding needed.</p>
+    <h1>Ask a question, or describe an app.</h1>
+    <p class="lead">Ask anything about how apps work and get a plain answer. Or describe an app you want: a builder writes the full plan, then makes it block by block while you watch and learn how it is put together. No coding needed.</p>
     <form id="idea-form">
-      <label class="sr" for="idea">Your idea</label>
-      <textarea id="idea" rows="3" maxlength="600" placeholder="For example: an app to track how tall my plants grow" required></textarea>
-      <div class="chips" aria-label="Example ideas">${EXAMPLES.map((e) => `<button type="button" class="chip">${esc(e)}</button>`).join('')}</div>
+      <label class="sr" for="idea">Your question or idea</label>
+      <textarea id="idea" rows="3" maxlength="600" placeholder="For example: a chore chart for my family with points" required></textarea>
+      <div class="chips" aria-label="Examples">${EXAMPLES.map((e) => `<button type="button" class="chip">${esc(e)}</button>`).join('')}</div>
       <div class="start-actions">
-        <button id="go" class="btn primary" type="submit">Start building</button>
+        <button id="go" class="btn primary" type="submit">Send</button>
         <button id="demo-btn" class="btn ghost" type="button">Watch a demo build</button>
       </div>
       <p id="start-note" class="note" role="status"></p>
     </form>
+    <div id="answers" class="answers" aria-live="polite"></div>
   </div>
 </section>
 
@@ -60,68 +63,92 @@ $('#app').innerHTML = `
     <button id="home-btn" class="btn small ghost" type="button">New idea</button>
   </header>
   <nav id="stepper" class="stepper" aria-label="Stages of the build"></nav>
-  <main id="window" class="window">
-    <div id="scene" class="scene"></div>
+  <main class="window">
+    <div class="site">
+      <div id="world" class="world"></div>
+      <div class="narrator">
+        <div class="face" aria-hidden="true"><svg viewBox="-22 -24 44 44">${builder(0, 0, 1).replace(/<ellipse[^>]*>/, '')}</svg></div>
+        <p id="now" role="status" aria-live="polite"></p>
+      </div>
+    </div>
     <aside id="panel" class="panel"></aside>
-    <div id="curtain" class="curtain" aria-hidden="true"></div>
   </main>
-  <footer class="narrator">
-    <div class="face" aria-hidden="true"><svg viewBox="-22 -24 44 44">${builder(0, 0, 1).replace(/<ellipse[^>]*>/, '')}</svg></div>
-    <p id="now" role="status" aria-live="polite"></p>
-  </footer>
   <div id="ask" class="ask" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>
+  <div id="banner" class="banner" aria-hidden="true"></div>
   <div id="offline" class="offline" role="alert" hidden>Lost the connection to the builder. Is Buildscape still running in your terminal?</div>
 </section>`;
 
-// ---------------------------------------------------------------- drawing the build view
+const world = new World($('#world'));
+world.onPick = (b) => { picked = b; renderPanel(); $('#panel').scrollTop = 0; };
 
-const liveStage = () => view!.stage;
+// ---------------------------------------------------------------- drawing
+
 const isDone = (id: StageId) => !!view && view.visited.includes(id) && (id !== view.stage || !!view.finished?.ok);
-const tasksIn = (id: StageId) => view!.tasks.filter((t) => t.stage === id);
-/** How much of a stage's drawing is visible: grows with the jobs done, complete once the builder has moved on. */
-const stepsFor = (id: StageId) => (id === 'done' || isDone(id) || (view!.finished && !view!.running) ? 4 : Math.min(tasksIn(id).length, 3));
 
 function renderStepper() {
   if (!view) return;
   $('#stepper').innerHTML = STAGES.map((s, i) => {
     const visited = view!.visited.includes(s.id);
-    const cls = [isDone(s.id) ? 'done' : '', s.id === liveStage() && view!.running ? 'live' : '', s.id === shown ? 'shown' : ''].join(' ');
-    return `<button type="button" class="step ${cls}" data-stage="${s.id}" ${visited ? '' : 'disabled'} ${s.id === shown ? 'aria-current="step"' : ''}>
-      <span class="dot">${isDone(s.id) ? '✓' : i + 1}</span><span class="name">${s.house}</span></button>`;
+    const cls = [isDone(s.id) ? 'done' : '', s.id === view!.stage && view!.running ? 'live' : '', s.id === shown ? 'shown' : ''].join(' ');
+    return `<button type="button" class="step ${cls}" data-stage="${s.id}" style="--c:${s.color}" ${visited ? '' : 'disabled'} ${s.id === shown ? 'aria-current="step"' : ''}>
+      <span class="dot">${isDone(s.id) ? '✓' : i + 1}</span><span class="name">${s.name}</span></button>`;
   }).join('');
 }
 
-function renderScene() {
-  $('#scene').innerHTML = scene(shown);
-  // Let the browser paint the empty drawing first so the steps animate in.
-  requestAnimationFrame(() => requestAnimationFrame(() => setSteps($('#scene'), stepsFor(shown))));
+function answerCard(question: string, answer: string[]) {
+  return `<div class="answer"><p class="eyebrow">You asked</p><p class="q">${esc(question)}</p>${answer.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
+}
+
+function chatBox() {
+  return source === 'live' ? `<form id="change-form" class="change"><label for="change">Ask a question, or ask for a change.</label>
+    <textarea id="change" rows="2" maxlength="600" placeholder="For example: add a dark theme, or: where are my chores saved?" required></textarea>
+    <button class="btn" type="submit">Send</button></form><div id="panel-answers"></div>` : '';
+}
+
+function structureHtml() {
+  const st = view?.finished?.structure ?? [];
+  if (!st.length) return '';
+  return `<h2>How your app is built</h2><div class="structure">${st.map((d) => {
+    const s = stageInfo(d.stage);
+    return `<div class="sdist" style="--c:${s.color}"><h3>${s.name} <span>${esc(s.real.toLowerCase())}</span></h3>
+      <ul>${d.parts.map((p) => `<li><strong>${esc(p.name)}</strong>${esc(p.does)}</li>`).join('')}</ul></div>`;
+  }).join('')}</div>
+  <p class="flow">How they work together: you tap something on a <b>screen</b>, a <b>rule</b> decides what happens, the rule saves it in <b>memory</b>, and the <b>checks</b> make sure the rules keep working.</p>`;
 }
 
 function renderPanel() {
   if (!view) return;
-  const s = stageInfo(shown);
-  const n = STAGES.findIndex((x) => x.id === shown) + 1;
-  const tasks = tasksIn(shown);
   const fin = view.finished;
+  if (picked) {
+    const s = stageInfo(picked.stage);
+    $('#panel').innerHTML = `<button class="back" type="button" data-act="back">Back</button>
+      <p class="eyebrow" style="color:${s.color}">${s.name} district</p><h1>${esc(picked.name)}</h1>
+      <p class="real">${esc(picked.does)}</p>
+      ${picked.level > 1 ? `<p class="meta">The builder came back to improve this part ${picked.level - 1} time${picked.level > 2 ? 's' : ''}.</p>` : ''}
+      <div class="lesson"><h2>What this district is</h2><p>${s.lesson}</p></div>`;
+    return;
+  }
+  const s = stageInfo(shown);
+  const tasks = view.tasks.filter((t) => t.stage === shown);
   let body: string;
   if (shown === 'done' && fin?.ok) {
     body = `<p class="summary">${esc(fin.summary)}</p>
       <div class="finish-actions">
         ${fin.previewUrl ? `<a class="btn primary" href="${esc(fin.previewUrl)}" target="_blank" rel="noopener">Open your app</a>` : ''}
-        <button class="btn ghost" type="button" data-act="home">Build something new</button>
+        ${fin.handoffUrl ? `<a class="btn" href="${esc(fin.handoffUrl)}" target="_blank" rel="noopener">Guide for a developer</a>` : ''}
       </div>
-      ${source === 'live' ? `<form id="change-form" class="change"><label for="change">Want something different? Ask for a change.</label>
-        <textarea id="change" rows="2" maxlength="600" placeholder="For example: make the buttons bigger and add a dark theme" required></textarea>
-        <button class="btn" type="submit">Ask the builder</button></form>` : ''}
-      <p class="recap">${view.tasks.length} jobs done across ${view.visited.filter((v) => v !== 'done').length} stages. Click a stage above to look back at what happened there.</p>`;
+      ${structureHtml()}
+      ${chatBox()}
+      <p class="recap">${view.tasks.length} jobs and ${view.blocks.length} blocks. Click any block on the site to see what it does.</p>`;
   } else {
-    body = `<h2>Done in this stage</h2>
+    body = `<h2>Done here</h2>
       ${tasks.length ? `<ul class="tasks">${tasks.map((t) => `<li data-id="${esc(t.id)}"><span class="tick" aria-hidden="true">✓</span>${esc(t.text)}</li>`).join('')}</ul>`
-        : `<p class="empty">${shown === liveStage() && view.running ? 'The builder has just arrived here. Finished jobs will show up in this list.' : 'Nothing was needed here this time.'}</p>`}
-      ${fin && !fin.ok && shown === liveStage() ? `<div class="stopped"><p>${esc(fin.summary)}</p><button class="btn primary" type="button" data-act="home">Try again</button></div>` : ''}`;
+        : `<p class="empty">${shown === view.stage && view.running ? 'The builder has just arrived. Finished jobs show up here.' : 'Nothing was needed here this time.'}</p>`}
+      ${fin && !fin.ok && shown === view.stage ? `<div class="stopped"><p>${esc(fin.summary)}</p><button class="btn primary" type="button" data-act="home">Try again</button></div>` : ''}`;
   }
-  $('#panel').innerHTML = `<p class="eyebrow">Stage ${n} of ${STAGES.length}</p><h1>${s.house}</h1><p class="real">${s.real}</p>
+  const n = STAGES.findIndex((x) => x.id === shown) + 1;
+  $('#panel').innerHTML = `<p class="eyebrow" style="color:${s.color}">Stage ${n} of ${STAGES.length}</p><h1>${s.name}</h1><p class="real">${s.real}</p>
     ${body}<div class="lesson"><h2>Good to know</h2><p>${s.lesson}</p></div>`;
 }
 
@@ -142,16 +169,20 @@ function renderAsk() {
   if (box.dataset.id === ask.id && !box.hidden) return;
   box.dataset.id = ask.id;
   box.hidden = false;
-  box.innerHTML = `<div class="ask-card" role="dialog" aria-modal="true" aria-labelledby="ask-q">
+  const sections = ask.sections?.length ? `<div class="plan">${ask.sections.map((s, i) => `<section class="psec" style="--i:${i}">
+      <h3>${esc(s.title)}</h3><ul>${s.items.map((it) => `<li>${esc(it)}</li>`).join('')}</ul></section>`).join('')}</div>` : '';
+  box.innerHTML = `<div class="ask-card${ask.sections?.length ? ' wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="ask-q">
     <div class="ask-face" aria-hidden="true"><svg viewBox="-30 -30 60 78">${builder(0, 0, 1, false, 'wave').replace(/<ellipse[^>]*>/, '')}</svg></div>
     <div class="bubble">
       <p class="eyebrow">Your builder has a question</p>
       <h2 id="ask-q">${esc(ask.question)}</h2>
+      ${ask.summary ? `<p class="ask-summary">${esc(ask.summary)}</p>` : ''}
+      ${sections}
       ${ask.details?.length ? `<ul class="ask-details">${ask.details.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
       <div class="ask-options">${ask.options.map((o, i) => `<button type="button" class="opt ${i === ask.recommended ? 'rec' : ''}" data-opt="${i}">
         <strong>${esc(o.label)}</strong><span>${esc(o.explain)}</span></button>`).join('')}</div>
     </div></div>`;
-  box.querySelector<HTMLButtonElement>('.opt.rec, .opt')?.focus();
+  box.querySelector<HTMLButtonElement>('.opt.rec, .opt')?.focus({ preventScroll: true });
 }
 
 function renderTop() {
@@ -166,14 +197,13 @@ function renderTop() {
 function renderAll() {
   $('#start').hidden = true;
   $('#build').hidden = false;
-  $('#window').dataset.stage = shown;
-  renderTop(); renderStepper(); renderScene(); renderPanel(); renderNow(); renderAsk();
+  renderTop(); renderStepper(); renderPanel(); renderNow(); renderAsk();
 }
 
 function open(stage: StageId) {
   shown = stage;
-  $('#window').dataset.stage = shown;
-  renderStepper(); renderScene(); renderPanel();
+  picked = null;
+  renderStepper(); renderPanel();
 }
 
 let toastTimer = 0;
@@ -186,20 +216,11 @@ function toast(text: string) {
   toastTimer = window.setTimeout(() => { el.hidden = true; }, 5000);
 }
 
-/** The short card between two stage windows: what just finished and where the builder goes next. */
-async function curtain(from: StageId, to: StageId) {
-  const el = $('#curtain');
-  const a = stageInfo(from), b = stageInfo(to);
-  const back = STAGES.findIndex((s) => s.id === to) < STAGES.findIndex((s) => s.id === from);
-  el.innerHTML = to === 'done'
-    ? `<p class="eyebrow">${a.house} finished</p><h2>Move-in day!</h2><p>Your app is ready to use.</p>`
-    : `<p class="eyebrow">${back ? 'Back to an earlier room' : `${a.house} finished`}</p><h2>${back ? '' : 'Next: '}${b.house}</h2><p>${b.real}</p>`;
-  el.classList.add('in');
-  await wait(450);
-  open(to);
-  await wait(1250);
-  el.classList.remove('in');
-  await wait(350);
+async function banner(stage: StageId) {
+  const s = stageInfo(stage);
+  const el = $('#banner');
+  el.innerHTML = `<span style="background:${s.color}"></span><b>${stage === 'done' ? 'All done' : `Next: ${s.name}`}</b> ${esc(s.real)}`;
+  el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
 }
 
 function showStart() {
@@ -207,9 +228,8 @@ function showStart() {
   $('#build').hidden = true;
   $('#start').hidden = false;
   $('#ask').hidden = true;
-  const go = $<HTMLButtonElement>('#go');
-  go.disabled = !online;
-  $('#start-note').textContent = online ? '' : 'To build your own app, start Buildscape on your computer (npm start). You can watch the demo build right now.';
+  $<HTMLButtonElement>('#go').disabled = !online;
+  $('#start-note').textContent = online ? '' : 'To ask or build, start Buildscape on your computer (npm start). You can watch the demo build right now.';
 }
 
 // ---------------------------------------------------------------- the story, played at a watchable pace
@@ -239,9 +259,12 @@ async function apply(m: StoryMsg, stale: () => boolean) {
   if (m.type === 'state') {
     if (!m.data.idea) { if (!view || !view.finished) showStart(); return; }
     view = structuredClone(m.data);
+    view.blocks ??= [];
     shown = view.stage;
+    picked = null;
     stageSince = performance.now();
     renderAll();
+    world.reset(view.blocks, view.stage, !!view.finished?.ok);
     return;
   }
   if (!view) return;
@@ -250,33 +273,38 @@ async function apply(m: StoryMsg, stale: () => boolean) {
       const left = MIN_STAGE_MS - (performance.now() - stageSince);
       if (left > 0) await wait(left);
       if (stale()) return;
-      const from = view.stage;
-      if (shown !== from) open(from);
-      setSteps($('#scene'), 4); // finishing touch on the stage we are leaving
-      await wait(1000);
-      if (stale()) return;
       view.stage = m.stage;
       if (!view.visited.includes(m.stage)) view.visited.push(m.stage);
       sound.stage();
-      await curtain(from, m.stage);
+      void banner(m.stage);
+      open(m.stage);
+      if (m.stage !== 'done') await world.goTo(m.stage);
       stageSince = performance.now();
       break;
     }
     case 'now':
       view.now = m.text;
       renderNow();
-      await wait(500);
+      await wait(400);
       break;
+    case 'block': {
+      const old = view.blocks.find((b) => b.id === m.data.id);
+      view.blocks = old ? view.blocks.map((b) => (b.id === m.data.id ? m.data : b)) : [...view.blocks, m.data];
+      sound.task();
+      await world.build(m.data, `${old ? 'Improving' : 'Building'}: ${m.data.name}`);
+      if (stale()) return;
+      world.say('');
+      break;
+    }
     case 'task':
       if (view.tasks.some((t) => t.id === m.data.id)) break;
       view.tasks.push(m.data);
-      sound.task();
-      if (m.data.stage === shown) {
+      if (m.data.text === 'Every check passed') world.passed();
+      if (m.data.stage === shown && !picked) {
         renderPanel();
         $('#panel').querySelector(`li[data-id="${CSS.escape(m.data.id)}"]`)?.classList.add('new');
-        setSteps($('#scene'), stepsFor(shown));
       }
-      await wait(1300);
+      await wait(700);
       break;
     case 'ask':
       view.ask = m.data;
@@ -291,8 +319,16 @@ async function apply(m: StoryMsg, stale: () => boolean) {
       view.finished = m.data;
       view.running = false;
       view.ask = null;
-      if (m.data.ok) sound.finish();
-      renderAll();
+      if (m.data.ok) {
+        view.stage = 'done';
+        if (!view.visited.includes('done')) view.visited.push('done');
+        sound.finish();
+        void banner('done');
+        shown = 'done';
+        picked = null;
+        renderAll();
+        await world.celebrate();
+      } else renderAll();
       break;
     case 'problem':
       sound.problem();
@@ -314,13 +350,13 @@ feed = live(
   },
 );
 
-async function startRun(idea: string, change = false): Promise<string | null> {
+/** The one chat box: the brain decides whether this is a question or something to build. */
+async function send(text: string): Promise<MessageReply> {
   try {
-    const res = await fetch('/api/run', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idea, change }) });
-    const out = await res.json();
-    return out.ok ? null : String(out.error ?? 'The builder could not start.');
+    const res = await fetch('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    return await res.json();
   } catch {
-    return 'Could not reach the builder. Is Buildscape still running in your terminal?';
+    return { ok: false, error: 'Could not reach the builder. Is Buildscape still running in your terminal?' };
   }
 }
 
@@ -349,14 +385,20 @@ function goHome() {
 
 $('#idea-form').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const idea = $<HTMLTextAreaElement>('#idea').value.trim();
-  if (idea.length < 3) return;
+  const box = $<HTMLTextAreaElement>('#idea');
+  const text = box.value.trim();
+  if (text.length < 3) return;
   sound.task(); // also unlocks sound in the browser
   const go = $<HTMLButtonElement>('#go');
   go.disabled = true;
-  const err = await startRun(idea);
+  $('#start-note').textContent = 'Thinking about what you mean...';
+  const out = await send(text);
   go.disabled = !online;
-  if (err) $('#start-note').textContent = err;
+  $('#start-note').textContent = out.ok ? '' : out.error;
+  if (out.ok && out.route === 'answer') {
+    $('#answers').insertAdjacentHTML('afterbegin', answerCard(text, out.answer));
+    box.value = '';
+  }
 });
 $('#idea').addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $<HTMLFormElement>('#idea-form').requestSubmit();
@@ -373,7 +415,7 @@ $('#home-btn').addEventListener('click', goHome);
 
 $('#stepper').addEventListener('click', (e) => {
   const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.step');
-  if (btn && !btn.disabled) open(btn.dataset.stage as StageId);
+  if (btn && !btn.disabled) { open(btn.dataset.stage as StageId); world.focus(shown); }
 });
 
 $('#ask').addEventListener('click', (e) => {
@@ -385,15 +427,24 @@ $('#ask').addEventListener('click', (e) => {
 });
 
 $('#panel').addEventListener('click', (e) => {
-  if ((e.target as HTMLElement).closest('[data-act="home"]')) goHome();
+  const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'home') goHome();
+  if (act === 'back') { picked = null; renderPanel(); }
 });
 $('#panel').addEventListener('submit', async (e) => {
   e.preventDefault();
   const box = $<HTMLTextAreaElement>('#change');
   const text = box.value.trim();
   if (text.length < 3) return;
-  const err = await startRun(text, true);
-  if (err) toast(err);
+  const btn = (e.target as HTMLElement).querySelector('button');
+  if (btn) btn.disabled = true;
+  const out = await send(text);
+  if (btn) btn.disabled = false;
+  if (!out.ok) toast(out.error);
+  else if (out.route === 'answer') {
+    document.querySelector('#panel-answers')?.insertAdjacentHTML('afterbegin', answerCard(text, out.answer));
+    box.value = '';
+  }
 });
 
 showStart();

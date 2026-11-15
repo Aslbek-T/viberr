@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Developer guide</title>
+<style>body{font:16px/1.55 system-ui,sans-serif;max-width:760px;margin:40px auto;padding:0 16px;color:#16302a;background:#fbf8ea}h1,h2,h3{line-height:1.2;margin:1.4em 0 .4em}p,li{margin:.25em 0}code{background:#ece6cc;padding:1px 5px;border-radius:4px}</style>
+<h1>Sprout Tracker: developer guide</h1>
+<p>A one-page app to track how tall your plants grow. Built by Claude Code inside Buildscape. Plain HTML, CSS and JavaScript, no build step and no server.</p>
+<h2>Run it</h2>
+<p>Open <code>index.html</code> in a browser. Run the checks with <code>npm test</code> (runs <code>node tests.js</code>).</p>
+<h2>Files</h2>
+<ul>
+<li><code>index.html</code>: the page: the add-plant form and the container for plant cards. Loads <code>storage.js</code> then <code>app.js</code>.</li>
+<li><code>styles.css</code>: colors, card layout and a phone layout (<code>@media</code>).</li>
+<li><code>app.js</code>: all the rules: <code>addPlant</code>, <code>removePlant</code>, <code>addMeasurement</code>, <code>removeMeasurement</code>, <code>calculateGrowth</code>, <code>chartPoints</code> and the render functions. <code>startApp</code> wires the buttons on load.</li>
+<li><code>storage.js</code>: <code>savePlants</code> and <code>loadPlants</code>, a thin wrapper around <code>localStorage</code>.</li>
+<li><code>tests.js</code>: plain Node checks of the pure rules in <code>app.js</code>.</li>
+</ul>
+<h2>How the parts talk</h2>
+<p>Screen (button click) → rule in <code>app.js</code> changes the plant list → <code>savePlants</code> stores it → <code>render</code> redraws the cards. On load, <code>loadPlants</code> → <code>render</code>.</p>
+<h2>Data</h2>
+<p>Stored in <code>localStorage</code> under <code>plant-growth-tracker</code> as an array of <code>{ id, name, measurements: [{ id, date, height }] }</code>.</p>
+<h2>Good next steps</h2>
+<ul><li>Export and import the data as a file, so it can move between devices.</li><li>Units setting (cm or inches).</li><li>Reminders to measure each week.</li></ul>
