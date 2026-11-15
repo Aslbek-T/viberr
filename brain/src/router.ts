@@ -1,6 +1,6 @@
 import { spawn } from 'node:child_process';
 import os from 'node:os';
-import type { MessageReply } from '../../shared/story.ts';
+import type { AgentId, MessageReply } from '../../shared/story.ts';
 import { CLAUDE_BIN, CLAUDE_MODEL } from './config.ts';
 import { runner } from './runner.ts';
 import { story } from './story.ts';
@@ -9,7 +9,7 @@ import { answerWithGemini, routeWithGemini } from './translator.ts';
 // Everything the person types goes through here first, like the chat box of Claude Code, Codex or Cursor:
 // a question gets a plain answer right away; an app idea (or a change to the app) starts a build.
 
-const TEACHER = `You are the friendly teacher inside Buildscape, an app for people who have never coded.
+const TEACHER = `You are the friendly teacher inside Vibeerr, an app for people who have never coded.
 Answer the question in plain words, like a patient teacher. You may use a real technical term, but explain it
 in the same sentence, and use a small everyday comparison when it helps. 2 to 5 short paragraphs, no code,
 no markdown headings, no lists longer than 4 items. Do not offer to build anything.`;
@@ -51,8 +51,12 @@ function askClaude(question: string, context: string): Promise<string[] | null> 
   });
 }
 
-export async function handleMessage(text: string): Promise<MessageReply> {
-  if (story.state.running) return { ok: false, error: 'The builder is busy right now. Wait until it is done, or press Stop.' };
+export async function handleMessage(text: string, opts?: { folder?: string; agent?: AgentId }): Promise<MessageReply> {
+  if (story.state.running) {
+    console.log(`[message] note: ${text.slice(0, 80)}`);
+    const noted = runner.addNote(text);
+    return noted.ok ? { ok: true, route: 'note' } : { ok: false, error: noted.error ?? 'That note could not be sent.' };
+  }
   const hasApp = !!runner.run && !!story.state.finished?.ok;
   const route = (await routeWithGemini(text, hasApp)) ?? guessRoute(text, hasApp);
   console.log(`[message] ${route}: ${text.slice(0, 80)}`);
@@ -62,6 +66,6 @@ export async function handleMessage(text: string): Promise<MessageReply> {
     return answer ? { ok: true, route: 'answer', answer }
       : { ok: false, error: 'The teacher could not answer just now. Check that Claude Code works in a terminal, or add a Gemini key.' };
   }
-  const started = runner.start(text, route === 'change');
+  const started = await runner.start(text, { change: route === 'change', folder: opts?.folder, agent: opts?.agent ?? (route === 'change' ? runner.run?.agent : undefined) });
   return started.ok ? { ok: true, route } : { ok: false, error: started.error ?? 'The builder could not start.' };
 }

@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { WebSocket } from 'ws';
-import type { Ask, Block, ClientMsg, Finished, RecordedLine, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
+import type { AgentId, Ask, Block, ClientMsg, Finished, PlanSection, RecordedLine, RunState, StageId, StoryMsg, Task } from '../../shared/story.ts';
 import { ASK_TIMEOUT_MS, RUNS_DIR } from './config.ts';
 import { newId } from './ids.ts';
 import { stageOf, type Raw } from './stages.ts';
-import { narratorKind, translateStep, type BlockWords } from './translator.ts';
+import { explainStage, narratorKind, translateStep, type BlockWords } from './translator.ts';
 
 const FLUSH_MS = 3500;
 
@@ -19,12 +19,16 @@ class Story {
   private buffer: Raw[] = [];
   private timer?: NodeJS.Timeout;
   private busy = false;
-  private pending = new Map<string, { resolve: (o: number | null) => void; timer: NodeJS.Timeout }>();
+  private pending = new Map<string, { resolve: (choice: { option: number | null; plan?: PlanSection[]; summary?: string }) => void; timer: NodeJS.Timeout }>();
   private record?: { file: string; start: number };
   private blockIds = new Map<string, string>(); // file -> block id; files never leave the brain
+  private guideAt = new Map<StageId, number>();
+  /** The runner saves VIBEERR.md whenever the story moves forward. */
+  onProgress: (() => void) | null = null;
 
   private blank(): RunState {
-    return { idea: null, running: false, stage: 'plan', visited: [], tasks: [], blocks: [], now: '', ask: null, finished: null, narrator: narratorKind() };
+    return { idea: null, running: false, stage: 'plan', visited: [], tasks: [], blocks: [], now: '', ask: null, finished: null,
+      narrator: narratorKind(), guides: {}, notes: [], agent: 'claude', folder: '' };
   }
 
   // ---------------------------------------------------------------- browsers
@@ -36,7 +40,7 @@ class Story {
     ws.on('message', (raw) => {
       try {
         const m = JSON.parse(String(raw)) as ClientMsg;
-        if (m.type === 'answer') this.answer(m.id, m.option);
+        if (m.type === 'answer') this.answer(m.id, m.option, m.plan, m.summary);
       } catch { /* ignore bad messages */ }
     });
   }
@@ -53,10 +57,13 @@ class Story {
   // ---------------------------------------------------------------- run lifecycle
 
   /** `fresh` is false when the person asks for a change to the app they already built. */
-  start(idea: string, slug: string, fresh: boolean) {
+  start(idea: string, slug: string, fresh: boolean, meta: { agent: AgentId; folder: string }) {
     const keep = fresh ? [] : this.state.tasks;
+    const notes = fresh ? [] : this.state.notes;
+    const guides = fresh ? {} : this.state.guides;
     if (fresh) this.blockIds.clear();
     this.state = { ...this.blank(), idea, running: true, tasks: keep, blocks: fresh ? [] : this.state.blocks,
+      notes, guides, agent: meta.agent, folder: meta.folder,
       visited: fresh ? ['plan'] : this.state.visited, stage: 'plan' };
     this.buffer = [];
     fs.mkdirSync(RUNS_DIR, { recursive: true });
@@ -65,9 +72,10 @@ class Story {
     // The recording starts with the state so a replay can begin from a clean screen.
     fs.appendFileSync(this.record.file, JSON.stringify({ t: 0, msg: { type: 'state', data: this.state } }) + '\n');
     this.say(fresh
-      ? 'Your builder is reading your idea and getting ready to write the plan.'
-      : 'Your builder is back on site and looking at which blocks your change touches.');
+      ? 'Your builder is reading your idea and getting ready to write a short plan you can edit.'
+      : 'Your builder is back and looking at what your change touches.');
     if (fresh) this.addTask('plan', 'Read your idea carefully');
+    void this.fillGuide('plan');
     clearInterval(this.timer);
     this.timer = setInterval(() => void this.flush(), FLUSH_MS);
   }
@@ -78,7 +86,7 @@ class Story {
     this.buffer.push(r);
   }
 
-  private say(text: string) {
+  say(text: string) {
     this.state.now = text;
     this.send({ type: 'now', stage: this.state.stage, text });
   }
@@ -88,6 +96,7 @@ class Story {
     this.state.stage = stage;
     if (!this.state.visited.includes(stage)) this.state.visited.push(stage);
     this.send({ type: 'stage', stage });
+    void this.fillGuide(stage);
   }
 
   /** Adds a finished job to a stage's list. */
@@ -128,6 +137,7 @@ class Story {
         if (meaningful) for (const t of words.tasks) this.addTask(part.stage, t);
         if (part.items.some((r) => r.kind === 'problem')) this.problem('The builder found a problem and is fixing it.');
       }
+      this.onProgress?.();
     } finally {
       this.busy = false;
     }
@@ -162,7 +172,7 @@ class Story {
     clearInterval(this.timer);
     await this.flushNow();
     if (done.ok) done = { ...done, structure: this.structure() };
-    for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve(null); }
+    for (const p of this.pending.values()) { clearTimeout(p.timer); p.resolve({ option: null }); }
     this.pending.clear();
     this.state.ask = null;
     this.state.running = false;
@@ -178,15 +188,62 @@ class Story {
 
   // ---------------------------------------------------------------- questions for the person
 
-  /** Shows a question and waits. Resolves with the option index, or null if nobody answered in time. */
-  ask(card: Omit<Ask, 'id'>): Promise<number | null> {
+  /** Shows a question and waits. Resolves with the choice, plus any plan lines the person edited. */
+  ask(card: Omit<Ask, 'id'>): Promise<{ option: number | null; plan?: PlanSection[]; summary?: string }> {
     const ask: Ask = { ...card, id: newId('ask_') };
     this.state.ask = ask;
     this.send({ type: 'ask', data: ask });
     return new Promise((resolve) => {
-      const timer = setTimeout(() => { this.pending.delete(ask.id); this.clearAsk(ask.id, null); resolve(null); }, ASK_TIMEOUT_MS);
+      const timer = setTimeout(() => {
+        this.pending.delete(ask.id);
+        this.clearAsk(ask.id, null);
+        resolve({ option: null });
+      }, ASK_TIMEOUT_MS);
       this.pending.set(ask.id, { resolve, timer });
     });
+  }
+
+  /** Drops a waiting question, for example when the person switches builders. */
+  cancelAsk() {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      this.clearAsk(id, null);
+      pending.resolve({ option: null });
+    }
+    this.pending.clear();
+  }
+
+  note(text: string) {
+    this.state.notes = [...this.state.notes, text].slice(-12);
+    this.send({ type: 'note', text });
+    this.onProgress?.();
+  }
+
+  setAgent(agent: AgentId) {
+    this.state.agent = agent;
+    this.send({ type: 'agent', agent });
+  }
+
+  /** Back to the opening screen. A build that was running is no longer shown. */
+  reset() {
+    clearInterval(this.timer);
+    this.timer = undefined;
+    for (const pending of this.pending.values()) { clearTimeout(pending.timer); pending.resolve({ option: null }); }
+    this.pending.clear();
+    this.buffer = [];
+    this.record = undefined;
+    this.blockIds.clear();
+    this.state = this.blank();
+    this.send({ type: 'state', data: this.state });
+  }
+
+  private async fillGuide(stage: StageId) {
+    const token = (this.guideAt.get(stage) ?? 0) + 1;
+    this.guideAt.set(stage, token);
+    const text = await explainStage(this.state.idea ?? '', stage);
+    if (this.guideAt.get(stage) !== token || !this.state.idea) return;
+    this.state.guides = { ...this.state.guides, [stage]: text };
+    this.send({ type: 'guide', stage, text });
   }
 
   private clearAsk(id: string, option: number | null) {
@@ -194,14 +251,24 @@ class Story {
     this.send({ type: 'answered', id, option });
   }
 
-  private answer(id: string, option: number) {
-    const p = this.pending.get(id);
-    if (!p) return;
-    clearTimeout(p.timer);
+  private answer(id: string, option: number, plan?: PlanSection[], summary?: string) {
+    const pending = this.pending.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
     this.pending.delete(id);
     this.clearAsk(id, option);
-    p.resolve(option);
+    pending.resolve({ option, plan: cleanPlan(plan), summary: summary?.trim().slice(0, 300) || undefined });
   }
+}
+
+function cleanPlan(plan?: PlanSection[]): PlanSection[] | undefined {
+  if (!Array.isArray(plan)) return undefined;
+  const sections = plan.slice(0, 6).map((section) => ({
+    title: String(section?.title ?? '').replace(/[`#]/g, '').trim().slice(0, 80),
+    items: (Array.isArray(section?.items) ? section.items : [])
+      .map((item) => String(item).replace(/\s+/g, ' ').trim().slice(0, 300)).filter(Boolean).slice(0, 8),
+  })).filter((section) => section.title && section.items.length);
+  return sections.length ? sections : undefined;
 }
 
 export const story = new Story();

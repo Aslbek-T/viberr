@@ -13,3 +13,8 @@ sunhacks asks teams to credit AI use. One line per meaningful piece of work: `- 
 - Gemini (optional, free tier): writes the plain-language explanations at run time
 - Ideas for the builder character, stages and color mood came from our teammate's prototype built with Codex: https://github.com/DevBehruz/vibeerr
 - Claude (in a Claude project): block-site redesign with walking builder, one chat box that routes questions vs builds, full plain-language plan card, structure summary and developer handoff (web/src/world.ts, web/src/main.ts, brain/src/router.ts, brain/src/runner.ts, brain/src/story.ts, brain/src/translator.ts, shared/story.ts, scripts/make-demo.mjs)
+- Cursor (Grok): plain-language stages, editable short plan, longer prompt box, notes while a build runs, stop and start over, folder plus Claude/Cursor/Codex choice, and a VIBEERR.md brief so those AIs can take turns (shared/story.ts, web/src/main.ts, web/src/styles.css, brain/src/runner.ts, brain/src/agents.ts, brain/src/brief.ts, brain/src/translator.ts)
+- Cursor (Grok): Gemini guide falls through overloaded and retired model ids to one that still answers (brain/src/translator.ts)
+- Cursor (Grok): landing page leads with the prompt, and choosing a folder opens the person's own folders (web/src/main.ts, web/src/styles.css, brain/src/server.ts)
+- Cursor (Grok): the Cursor choice finds the installed agent command and runs it in the project folder (brain/src/agents.ts, brain/src/runner.ts)
+- Cursor (Grok): older chat stays in a small strip beside the prompt, and the developer guide still opens after a later change (web/src/main.ts, web/src/styles.css, brain/src/brief.ts, brain/src/runner.ts, brain/src/server.ts)

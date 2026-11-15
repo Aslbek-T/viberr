@@ -10,7 +10,7 @@ const DISTRICTS: StageId[] = ['setup', 'look', 'logic', 'memory', 'check'];
 const DX = (i: number) => 30 + i * 230;
 const DW = 216, DY = 96, DH = 330;
 /** The real word for each district, so people learn it while they watch. */
-const SUB: Partial<Record<StageId, string>> = { setup: 'project setup', look: 'the frontend', logic: 'the logic (backend)', memory: 'the database', check: 'the tests' };
+const SUB: Partial<Record<StageId, string>> = { setup: 'getting ready', look: 'what you see', logic: 'what it does', memory: 'what it keeps', check: 'making sure' };
 const PLAN_AT = { x: 150, y: 590 };  // the plan desk, bottom left
 const READY_AT = { x: 1060, y: 590 }; // the ready gate, bottom right
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -81,9 +81,9 @@ function tree(x: number, y: number, s: number) {
 
 /** The connections that teach how an app is put together. Each lights up once both ends have blocks. */
 const LINKS: { from: StageId; to: StageId; text: string; lift: number }[] = [
-  { from: 'look', to: 'logic', text: 'your taps go to the rules', lift: 44 },
-  { from: 'logic', to: 'memory', text: 'rules save and load', lift: 44 },
-  { from: 'check', to: 'logic', text: 'checks try the rules', lift: 84 },
+  { from: 'look', to: 'logic', text: 'a tap starts an action', lift: 44 },
+  { from: 'logic', to: 'memory', text: 'actions save and load', lift: 44 },
+  { from: 'check', to: 'logic', text: 'try-outs test the actions', lift: 84 },
 ];
 
 function staticSite(): string {
@@ -106,10 +106,10 @@ function staticSite(): string {
   s += `<g class="spot" data-stage="plan"><rect x="${PLAN_AT.x - 70}" y="${PLAN_AT.y - 52}" width="96" height="10" rx="3" fill="#c79a63"/>
       <rect x="${PLAN_AT.x - 64}" y="${PLAN_AT.y - 42}" width="6" height="40" fill="#a67c4b"/><rect x="${PLAN_AT.x + 14}" y="${PLAN_AT.y - 42}" width="6" height="40" fill="#a67c4b"/>
       <rect x="${PLAN_AT.x - 62}" y="${PLAN_AT.y - 64}" width="80" height="14" rx="2" fill="#1f4f7a" transform="rotate(-4 ${PLAN_AT.x - 22} ${PLAN_AT.y - 57})"/>
-      <text class="dname" x="${PLAN_AT.x - 70}" y="${PLAN_AT.y + 26}" fill="#9fc3e8">PLAN</text></g>`;
+      <text class="dname" x="${PLAN_AT.x - 70}" y="${PLAN_AT.y + 26}" fill="#9fc3e8">IDEA</text></g>`;
   s += `<g class="spot" data-stage="done"><rect x="${READY_AT.x + 30}" y="${READY_AT.y - 110}" width="6" height="112" fill="#d6b56c"/>
       <path class="flag" d="M${READY_AT.x + 36} ${READY_AT.y - 108}h52l-12 14l12 14h-52z" fill="#b9d897"/>
-      <text class="dname" x="${READY_AT.x - 40}" y="${READY_AT.y + 26}" fill="#b9d897">READY</text></g>`;
+      <text class="dname" x="${READY_AT.x - 40}" y="${READY_AT.y + 26}" fill="#b9d897">DONE</text></g>`;
   for (let i = 0; i < 12; i++) s += tree(290 + i * 62 + (i % 3) * 9, 560 + (i % 2) * 44, 0.7 + (i % 3) * 0.12);
   return s;
 }
@@ -135,7 +135,7 @@ export class World {
   onPick: (b: Block) => void = () => {};
 
   constructor(private root: HTMLElement) {
-    root.innerHTML = `<svg class="world-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="The building site: one district per part of your app">
+    root.innerHTML = `<svg class="world-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="The building site: one district per part of your app">
       ${staticSite()}<g class="links">${LINKS.map(linkSvg).join('')}</g><g class="blocks"></g><g class="fx"></g>
       <g class="bot"></g><g class="say" visibility="hidden"><rect rx="10" height="30" fill="#152a2b" stroke="#f4c858" stroke-width="1.5"/><text y="20" fill="#f0f0db"></text></g></svg>`;
     this.svg = root.querySelector('svg')!;

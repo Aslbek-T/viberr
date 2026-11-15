@@ -1,4 +1,4 @@
-import { STAGES, stageInfo, type Block, type MessageReply, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
+import { AGENTS, STAGES, stageInfo, type AgentId, type Block, type MessageReply, type PlanSection, type RunState, type StageId, type StoryMsg } from '../../shared/story.ts';
 import { sound } from './audio.ts';
 import { demo, live, type Feed } from './net.ts';
 import { builder, World } from './world.ts';
@@ -11,58 +11,84 @@ const $ = <T extends HTMLElement = HTMLElement>(sel: string) => document.querySe
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, reduced ? Math.min(ms, 120) : ms));
-const MIN_STAGE_MS = 2500; // every district gets at least this long on screen, even when the builder is fast
+const MIN_STAGE_MS = 2500;
 
 const EXAMPLES = [
-  'A chore chart for my family with points',
-  'An app to track how tall my plants grow',
-  'What is the difference between frontend and backend?',
-  'A tip calculator that splits the bill between friends',
-  'What is a database, in simple words?',
+  'A chart of how tall my plants grow each week',
+  'A log of lab samples with the date and result',
+  'What is the difference between what I see and what the app does?',
+  'A reading list that remembers where I stopped',
 ];
 
-let view: RunState | null = null;      // what is on screen (follows the brain a few seconds behind, on purpose)
-let shown: StageId = 'plan';           // which stage the side panel explains
-let picked: Block | null = null;       // a block the person clicked
+let view: RunState | null = null;
+let shown: StageId = 'plan';
+let picked: Block | null = null;
 let source: 'live' | 'demo' = 'live';
 let online = false;
-let lastLive: RunState | null = null;  // the brain's latest state, kept while the demo plays
+let lastLive: RunState | null = null;
 let feed: Feed;
 let demoFeed: Feed | null = null;
 let stageSince = 0;
+let suggestedFolder = '';
+let sideAnswers: { q: string; a: string[] }[] = [];
 
-// ---------------------------------------------------------------- page skeleton
+const wordmark = `<p class="wordmark" aria-label="Vibeerr"><span class="mark" aria-hidden="true">V</span><span aria-hidden="true">Vibeerr</span></p>`;
+const agentOptions = AGENTS.map((agent) => `<option value="${agent.id}">${agent.label}</option>`).join('');
+const agentChoices = AGENTS.map((agent, index) => `<label class="agent-choice">
+  <input type="radio" name="agent" value="${agent.id}" ${index === 0 ? 'checked' : ''}>
+  <span><strong>${agent.label}</strong><small data-ready="${agent.id}">Checking this computer…</small><small>${esc(agent.blurb)}</small></span>
+</label>`).join('');
 
 $('#app').innerHTML = `
 <section id="start" class="start">
   <div class="start-card">
     <div class="logo" aria-hidden="true"><svg viewBox="-40 -40 80 110">${builder(0, 0, 1)}</svg></div>
-    <p class="eyebrow">Buildscape</p>
-    <h1>Ask a question, or describe an app.</h1>
-    <p class="lead">Ask anything about how apps work and get a plain answer. Or describe an app you want: a builder writes the full plan, then makes it block by block while you watch and learn how it is put together. No coding needed.</p>
-    <form id="idea-form">
-      <label class="sr" for="idea">Your question or idea</label>
-      <textarea id="idea" rows="3" maxlength="600" placeholder="For example: a chore chart for my family with points" required></textarea>
-      <div class="chips" aria-label="Examples">${EXAMPLES.map((e) => `<button type="button" class="chip">${esc(e)}</button>`).join('')}</div>
-      <div class="start-actions">
-        <button id="go" class="btn primary" type="submit">Send</button>
-        <button id="demo-btn" class="btn ghost" type="button">Watch a demo build</button>
+    ${wordmark}
+    <h1>Describe the app you want.</h1>
+    <p class="lead">Tell it your idea in plain words. A builder you already have writes a short plan you can edit, then makes the app while a guide explains each part. No coding needed.</p>
+    <form id="idea-form" class="start-layout">
+      <div class="prompt-main">
+        <label class="sr" for="idea">Your question or idea</label>
+        <textarea id="idea" rows="8" placeholder="For example: a chart of how tall my plants grow each week, with the date of each measurement" required></textarea>
+        <div class="chips" aria-label="Examples">${EXAMPLES.map((example) => `<button type="button" class="chip">${esc(example)}</button>`).join('')}</div>
+        <div class="start-actions">
+          <button id="go" class="btn primary" type="submit">Send</button>
+          <button id="demo-btn" class="btn ghost" type="button">Watch a demo build</button>
+        </div>
+        <p id="start-note" class="note" role="status"></p>
+        <aside id="start-history" class="chat-history" hidden>
+          ${wordmark}
+          <div id="answers" class="answers" aria-live="polite"></div>
+        </aside>
       </div>
-      <p id="start-note" class="note" role="status"></p>
+      <aside class="side-setup" aria-label="Folder and AI">
+        <div class="setup">
+          <label for="folder">Folder</label>
+          <input id="folder" class="field" type="text" autocomplete="off" spellcheck="false" placeholder="No folder chosen yet">
+          <button id="folder-pick" class="btn" type="button">Choose a folder</button>
+          <button id="folder-suggest" class="linkish" type="button">Use a Vibeerr folder</button>
+          <p id="folder-note" class="hint" role="status">Opens your folders so you can pick where this app will live. A new folder is fine.</p>
+        </div>
+        <fieldset class="agents">
+          <legend>Which AI do you already have?</legend>
+          ${agentChoices}
+        </fieldset>
+      </aside>
     </form>
-    <div id="answers" class="answers" aria-live="polite"></div>
   </div>
 </section>
 
 <section id="build" class="build" hidden>
   <header class="top">
-    <div class="brand">Buildscape</div>
     <div id="idea-line" class="idea-line"></div>
+    <div id="folder-line" class="folder-line"></div>
+    <label class="sr" for="agent-live">Builder</label>
+    <select id="agent-live" class="agent-live" aria-label="Which AI is building">${agentOptions}</select>
     <button id="sound-btn" class="btn small ghost" type="button"></button>
     <button id="stop-btn" class="btn small ghost" type="button">Stop</button>
-    <button id="home-btn" class="btn small ghost" type="button">New idea</button>
+    <button id="reset-btn" class="btn small ghost" type="button">Start over</button>
   </header>
-  <nav id="stepper" class="stepper" aria-label="Stages of the build"></nav>
+  <nav id="stepper" class="stepper" aria-label="Parts of the build"></nav>
   <main class="window">
     <div class="site">
       <div id="world" class="world"></div>
@@ -73,83 +99,114 @@ $('#app').innerHTML = `
     </div>
     <aside id="panel" class="panel"></aside>
   </main>
+  <div id="composer" class="composer">
+    <aside id="chat-history" class="chat-history" hidden>
+      ${wordmark}
+      <div id="live-answers" class="answers" aria-live="polite"></div>
+    </aside>
+    <form id="dock" class="dock">
+      <label for="dock-text">Send a note while it works</label>
+      <textarea id="dock-text" rows="2" placeholder="For example: use plain labels, or add a graph of the results"></textarea>
+      <button class="btn" type="submit">Send</button>
+    </form>
+  </div>
   <div id="ask" class="ask" hidden></div>
   <div id="toast" class="toast" role="status" hidden></div>
   <div id="banner" class="banner" aria-hidden="true"></div>
-  <div id="offline" class="offline" role="alert" hidden>Lost the connection to the builder. Is Buildscape still running in your terminal?</div>
+  <div id="offline" class="offline" role="alert" hidden>Lost the connection to the builder. Is Vibeerr still running in your terminal?</div>
 </section>`;
 
 const world = new World($('#world'));
-world.onPick = (b) => { picked = b; renderPanel(); $('#panel').scrollTop = 0; };
+world.onPick = (block) => { picked = block; renderPanel(); $('#panel').scrollTop = 0; };
 
-// ---------------------------------------------------------------- drawing
+function grow(box: HTMLTextAreaElement) {
+  const tall = box.id === 'idea';
+  box.style.height = 'auto';
+  box.style.height = `${Math.min(Math.max(box.scrollHeight, tall ? 220 : 72), tall ? 420 : 240)}px`;
+}
 
 const isDone = (id: StageId) => !!view && view.visited.includes(id) && (id !== view.stage || !!view.finished?.ok);
 
 function renderStepper() {
   if (!view) return;
-  $('#stepper').innerHTML = STAGES.map((s, i) => {
-    const visited = view!.visited.includes(s.id);
-    const cls = [isDone(s.id) ? 'done' : '', s.id === view!.stage && view!.running ? 'live' : '', s.id === shown ? 'shown' : ''].join(' ');
-    return `<button type="button" class="step ${cls}" data-stage="${s.id}" style="--c:${s.color}" ${visited ? '' : 'disabled'} ${s.id === shown ? 'aria-current="step"' : ''}>
-      <span class="dot">${isDone(s.id) ? '✓' : i + 1}</span><span class="name">${s.name}</span></button>`;
+  $('#stepper').innerHTML = STAGES.map((stage, index) => {
+    const cls = [isDone(stage.id) ? 'done' : '', stage.id === view!.stage && view!.running ? 'live' : '', stage.id === shown ? 'shown' : ''].join(' ');
+    return `<button type="button" class="step ${cls}" data-stage="${stage.id}" style="--c:${stage.color}" ${view!.visited.includes(stage.id) ? '' : 'disabled'} ${stage.id === shown ? 'aria-current="step"' : ''}>
+      <span class="dot">${isDone(stage.id) ? '✓' : index + 1}</span><span class="name">${stage.name}</span></button>`;
   }).join('');
 }
 
 function answerCard(question: string, answer: string[]) {
-  return `<div class="answer"><p class="eyebrow">You asked</p><p class="q">${esc(question)}</p>${answer.map((p) => `<p>${esc(p)}</p>`).join('')}</div>`;
+  return `<article class="answer"><p class="q">${esc(question)}</p><p>${esc(answer.join(' '))}</p></article>`;
 }
 
-function chatBox() {
-  return source === 'live' ? `<form id="change-form" class="change"><label for="change">Ask a question, or ask for a change.</label>
-    <textarea id="change" rows="2" maxlength="600" placeholder="For example: add a dark theme, or: where are my chores saved?" required></textarea>
-    <button class="btn" type="submit">Send</button></form><div id="panel-answers"></div>` : '';
+function renderChat() {
+  const html = sideAnswers.map((item) => answerCard(item.q, item.a)).join('');
+  for (const id of ['#answers', '#live-answers']) {
+    const box = document.querySelector<HTMLElement>(id);
+    if (box) box.innerHTML = html;
+  }
+  for (const room of document.querySelectorAll<HTMLElement>('.chat-history')) room.hidden = sideAnswers.length === 0;
 }
+
+function guideCard(stage: StageId) {
+  const info = stageInfo(stage);
+  const text = view?.guides?.[stage] || info.lesson;
+  return `<div class="guide-card"><h2>From your guide</h2><p>${esc(text)}</p></div>`;
+}
+
+function notesHtml() {
+  const notes = view?.notes ?? [];
+  if (!notes.length) return '';
+  return `<h2>Notes you sent</h2><ul class="notes">${notes.map((note) => `<li>${esc(note)}</li>`).join('')}</ul>`;
+}
+
 
 function structureHtml() {
-  const st = view?.finished?.structure ?? [];
-  if (!st.length) return '';
-  return `<h2>How your app is built</h2><div class="structure">${st.map((d) => {
-    const s = stageInfo(d.stage);
-    return `<div class="sdist" style="--c:${s.color}"><h3>${s.name} <span>${esc(s.real.toLowerCase())}</span></h3>
-      <ul>${d.parts.map((p) => `<li><strong>${esc(p.name)}</strong>${esc(p.does)}</li>`).join('')}</ul></div>`;
+  const structure = view?.finished?.structure ?? [];
+  if (!structure.length) return '';
+  return `<h2>How your app is built</h2><div class="structure">${structure.map((district) => {
+    const info = stageInfo(district.stage);
+    return `<div class="sdist" style="--c:${info.color}"><h3>${info.name} <span>${esc(info.real.toLowerCase())}</span></h3>
+      <ul>${district.parts.map((part) => `<li><strong>${esc(part.name)}</strong>${esc(part.does)}</li>`).join('')}</ul></div>`;
   }).join('')}</div>
-  <p class="flow">How they work together: you tap something on a <b>screen</b>, a <b>rule</b> decides what happens, the rule saves it in <b>memory</b>, and the <b>checks</b> make sure the rules keep working.</p>`;
+  <p class="flow">How they work together: you use a <b>page</b>, an <b>action</b> decides what happens, the result is <b>saved</b>, and a <b>try-out</b> makes sure the actions still work.</p>`;
 }
 
 function renderPanel() {
   if (!view) return;
   const fin = view.finished;
   if (picked) {
-    const s = stageInfo(picked.stage);
+    const info = stageInfo(picked.stage);
     $('#panel').innerHTML = `<button class="back" type="button" data-act="back">Back</button>
-      <p class="eyebrow" style="color:${s.color}">${s.name} district</p><h1>${esc(picked.name)}</h1>
+      <p class="eyebrow" style="color:${info.color}">${info.name}</p><h1>${esc(picked.name)}</h1>
       <p class="real">${esc(picked.does)}</p>
-      ${picked.level > 1 ? `<p class="meta">The builder came back to improve this part ${picked.level - 1} time${picked.level > 2 ? 's' : ''}.</p>` : ''}
-      <div class="lesson"><h2>What this district is</h2><p>${s.lesson}</p></div>`;
+      ${picked.level > 1 ? `<p class="meta">The builder improved this part ${picked.level - 1} time${picked.level > 2 ? 's' : ''}.</p>` : ''}
+      ${guideCard(picked.stage)}`;
     return;
   }
-  const s = stageInfo(shown);
-  const tasks = view.tasks.filter((t) => t.stage === shown);
+  const info = stageInfo(shown);
+  const tasks = view.tasks.filter((task) => task.stage === shown);
   let body: string;
   if (shown === 'done' && fin?.ok) {
-    body = `<p class="summary">${esc(fin.summary)}</p>
+    body = `${guideCard('done')}<p class="summary">${esc(fin.summary)}</p>
       <div class="finish-actions">
         ${fin.previewUrl ? `<a class="btn primary" href="${esc(fin.previewUrl)}" target="_blank" rel="noopener">Open your app</a>` : ''}
         ${fin.handoffUrl ? `<a class="btn" href="${esc(fin.handoffUrl)}" target="_blank" rel="noopener">Guide for a developer</a>` : ''}
       </div>
       ${structureHtml()}
-      ${chatBox()}
-      <p class="recap">${view.tasks.length} jobs and ${view.blocks.length} blocks. Click any block on the site to see what it does.</p>`;
+      ${notesHtml()}
+      <p class="recap">${view.tasks.length} jobs and ${view.blocks.length} blocks. Click any block to see what it does.</p>`;
   } else {
-    body = `<h2>Done here</h2>
-      ${tasks.length ? `<ul class="tasks">${tasks.map((t) => `<li data-id="${esc(t.id)}"><span class="tick" aria-hidden="true">✓</span>${esc(t.text)}</li>`).join('')}</ul>`
+    body = `${guideCard(shown)}
+      <h2>Done here</h2>
+      ${tasks.length ? `<ul class="tasks">${tasks.map((task) => `<li data-id="${esc(task.id)}"><span class="tick" aria-hidden="true">✓</span>${esc(task.text)}</li>`).join('')}</ul>`
         : `<p class="empty">${shown === view.stage && view.running ? 'The builder has just arrived. Finished jobs show up here.' : 'Nothing was needed here this time.'}</p>`}
-      ${fin && !fin.ok && shown === view.stage ? `<div class="stopped"><p>${esc(fin.summary)}</p><button class="btn primary" type="button" data-act="home">Try again</button></div>` : ''}`;
+      ${notesHtml()}
+      ${fin && !fin.ok && shown === view.stage ? `<div class="stopped"><p>${esc(fin.summary)}</p>${fin.handoffUrl ? `<a class="btn" href="${esc(fin.handoffUrl)}" target="_blank" rel="noopener">Guide for a developer</a>` : ''}<button class="btn primary" type="button" data-act="reset">Start over</button></div>` : ''}`;
   }
-  const n = STAGES.findIndex((x) => x.id === shown) + 1;
-  $('#panel').innerHTML = `<p class="eyebrow" style="color:${s.color}">Stage ${n} of ${STAGES.length}</p><h1>${s.name}</h1><p class="real">${s.real}</p>
-    ${body}<div class="lesson"><h2>Good to know</h2><p>${s.lesson}</p></div>`;
+  const index = STAGES.findIndex((stage) => stage.id === shown) + 1;
+  $('#panel').innerHTML = `<p class="eyebrow" style="color:${info.color}">Part ${index} of ${STAGES.length}</p><h1>${info.name}</h1><p class="real">${info.real}</p>${body}`;
 }
 
 function renderNow() {
@@ -157,7 +214,7 @@ function renderNow() {
   const el = $('#now');
   if (el.textContent === view.now) return;
   el.classList.remove('fresh');
-  void el.offsetWidth; // restart the fade
+  void el.offsetWidth;
   el.textContent = view.now;
   el.classList.add('fresh');
 }
@@ -169,18 +226,26 @@ function renderAsk() {
   if (box.dataset.id === ask.id && !box.hidden) return;
   box.dataset.id = ask.id;
   box.hidden = false;
-  const sections = ask.sections?.length ? `<div class="plan">${ask.sections.map((s, i) => `<section class="psec" style="--i:${i}">
-      <h3>${esc(s.title)}</h3><ul>${s.items.map((it) => `<li>${esc(it)}</li>`).join('')}</ul></section>`).join('')}</div>` : '';
+  const editable = !!ask.editable;
+  const summary = editable
+    ? `<label class="sr" for="plan-summary">The one-sentence summary</label><textarea id="plan-summary" class="summary-edit">${esc(ask.summary ?? '')}</textarea>`
+    : (ask.summary ? `<p class="ask-summary">${esc(ask.summary)}</p>` : '');
+  const sections = ask.sections?.length ? `<div class="plan">${ask.sections.map((section, index) => `<section class="psec" style="--i:${index}">
+      <h3>${esc(section.title)}</h3>
+      ${editable
+        ? `<div class="lines">${section.items.map((item) => `<textarea class="plan-edit">${esc(item)}</textarea>`).join('')}</div><button type="button" class="add-line" data-add>Add a line</button>`
+        : `<ul>${section.items.map((item) => `<li>${esc(item)}</li>`).join('')}</ul>`}
+    </section>`).join('')}</div>` : '';
   box.innerHTML = `<div class="ask-card${ask.sections?.length ? ' wide' : ''}" role="dialog" aria-modal="true" aria-labelledby="ask-q">
     <div class="ask-face" aria-hidden="true"><svg viewBox="-30 -30 60 78">${builder(0, 0, 1, false, 'wave').replace(/<ellipse[^>]*>/, '')}</svg></div>
     <div class="bubble">
-      <p class="eyebrow">Your builder has a question</p>
+      <p class="eyebrow">${editable ? 'Edit the plan' : 'Your builder has a question'}</p>
       <h2 id="ask-q">${esc(ask.question)}</h2>
-      ${ask.summary ? `<p class="ask-summary">${esc(ask.summary)}</p>` : ''}
+      ${summary}
       ${sections}
-      ${ask.details?.length ? `<ul class="ask-details">${ask.details.map((d) => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
-      <div class="ask-options">${ask.options.map((o, i) => `<button type="button" class="opt ${i === ask.recommended ? 'rec' : ''}" data-opt="${i}">
-        <strong>${esc(o.label)}</strong><span>${esc(o.explain)}</span></button>`).join('')}</div>
+      ${ask.details?.length ? `<ul class="ask-details">${ask.details.map((detail) => `<li>${esc(detail)}</li>`).join('')}</ul>` : ''}
+      <div class="ask-options">${ask.options.map((option, index) => `<button type="button" class="opt ${index === ask.recommended ? 'rec' : ''}" data-opt="${index}">
+        <strong>${esc(option.label)}</strong><span>${esc(option.explain)}</span></button>`).join('')}</div>
     </div></div>`;
   box.querySelector<HTMLButtonElement>('.opt.rec, .opt')?.focus({ preventScroll: true });
 }
@@ -188,8 +253,23 @@ function renderAsk() {
 function renderTop() {
   if (!view) return;
   $('#idea-line').textContent = `${source === 'demo' ? 'Demo build: ' : ''}${view.idea ?? ''}`;
+  const folder = $('#folder-line');
+  folder.textContent = view.folder ?? '';
+  folder.title = view.folder ?? '';
+  const select = $<HTMLSelectElement>('#agent-live');
+  if (document.activeElement !== select && view.agent) select.value = view.agent;
+  select.disabled = source === 'demo';
   $('#stop-btn').hidden = !view.running || source === 'demo';
-  $('#home-btn').hidden = view.running && source === 'live';
+  $('#composer').hidden = source === 'demo';
+  const dockLabel = $('#dock label');
+  const dockBox = $<HTMLTextAreaElement>('#dock-text');
+  if (view.running) {
+    dockLabel.textContent = 'Send a note while it works';
+    dockBox.placeholder = 'For example: use plain labels, or add a graph of the results';
+  } else {
+    dockLabel.textContent = 'Ask for a change, or ask a question';
+    dockBox.placeholder = 'For example: add a place to write a short note';
+  }
   $('#sound-btn').textContent = sound.on ? 'Sound on' : 'Sound off';
   $('#offline').hidden = online || source === 'demo';
 }
@@ -197,7 +277,7 @@ function renderTop() {
 function renderAll() {
   $('#start').hidden = true;
   $('#build').hidden = false;
-  renderTop(); renderStepper(); renderPanel(); renderNow(); renderAsk();
+  renderTop(); renderStepper(); renderPanel(); renderNow(); renderAsk(); renderChat();
 }
 
 function open(stage: StageId) {
@@ -217,9 +297,9 @@ function toast(text: string) {
 }
 
 async function banner(stage: StageId) {
-  const s = stageInfo(stage);
+  const info = stageInfo(stage);
   const el = $('#banner');
-  el.innerHTML = `<span style="background:${s.color}"></span><b>${stage === 'done' ? 'All done' : `Next: ${s.name}`}</b> ${esc(s.real)}`;
+  el.innerHTML = `<span style="background:${info.color}"></span><b>${stage === 'done' ? 'All done' : `Next: ${info.name}`}</b> ${esc(info.real)}`;
   el.classList.remove('in'); void el.offsetWidth; el.classList.add('in');
 }
 
@@ -227,20 +307,29 @@ function showStart() {
   view = null;
   $('#build').hidden = true;
   $('#start').hidden = false;
+  renderChat();
   $('#ask').hidden = true;
   $<HTMLButtonElement>('#go').disabled = !online;
-  $('#start-note').textContent = online ? '' : 'To ask or build, start Buildscape on your computer (npm start). You can watch the demo build right now.';
+  $('#start-note').textContent = online ? '' : 'To ask or build, start Vibeerr on your computer (npm start). You can watch the demo build right now.';
 }
 
-// ---------------------------------------------------------------- the story, played at a watchable pace
+function normalize(data: RunState): RunState {
+  const next = structuredClone(data);
+  next.blocks ??= [];
+  next.guides ??= {};
+  next.notes ??= [];
+  next.agent ??= 'claude';
+  next.folder ??= '';
+  return next;
+}
 
 const queue: StoryMsg[] = [];
 let pumping = false;
-let epoch = 0; // goes up when a new run or the demo replaces what is playing
+let epoch = 0;
 
-function push(m: StoryMsg) {
-  if (m.type === 'state') { queue.length = 0; epoch++; }
-  queue.push(m);
+function push(message: StoryMsg) {
+  if (message.type === 'state') { queue.length = 0; epoch++; }
+  queue.push(message);
   void pump();
 }
 
@@ -249,17 +338,16 @@ async function pump() {
   pumping = true;
   while (queue.length) {
     const mine = epoch;
-    const m = queue.shift()!;
-    try { await apply(m, () => mine !== epoch); } catch (err) { console.error(err); }
+    const message = queue.shift()!;
+    try { await apply(message, () => mine !== epoch); } catch (err) { console.error(err); }
   }
   pumping = false;
 }
 
-async function apply(m: StoryMsg, stale: () => boolean) {
-  if (m.type === 'state') {
-    if (!m.data.idea) { if (!view || !view.finished) showStart(); return; }
-    view = structuredClone(m.data);
-    view.blocks ??= [];
+async function apply(message: StoryMsg, stale: () => boolean) {
+  if (message.type === 'state') {
+    if (!message.data.idea) { if (!view || !view.finished) showStart(); return; }
+    view = normalize(message.data);
     shown = view.stage;
     picked = null;
     stageSince = performance.now();
@@ -268,58 +356,58 @@ async function apply(m: StoryMsg, stale: () => boolean) {
     return;
   }
   if (!view) return;
-  switch (m.type) {
+  switch (message.type) {
     case 'stage': {
       const left = MIN_STAGE_MS - (performance.now() - stageSince);
       if (left > 0) await wait(left);
       if (stale()) return;
-      view.stage = m.stage;
-      if (!view.visited.includes(m.stage)) view.visited.push(m.stage);
+      view.stage = message.stage;
+      if (!view.visited.includes(message.stage)) view.visited.push(message.stage);
       sound.stage();
-      void banner(m.stage);
-      open(m.stage);
-      if (m.stage !== 'done') await world.goTo(m.stage);
+      void banner(message.stage);
+      open(message.stage);
+      if (message.stage !== 'done') await world.goTo(message.stage);
       stageSince = performance.now();
       break;
     }
     case 'now':
-      view.now = m.text;
+      view.now = message.text;
       renderNow();
       await wait(400);
       break;
     case 'block': {
-      const old = view.blocks.find((b) => b.id === m.data.id);
-      view.blocks = old ? view.blocks.map((b) => (b.id === m.data.id ? m.data : b)) : [...view.blocks, m.data];
+      const old = view.blocks.find((block) => block.id === message.data.id);
+      view.blocks = old ? view.blocks.map((block) => (block.id === message.data.id ? message.data : block)) : [...view.blocks, message.data];
       sound.task();
-      await world.build(m.data, `${old ? 'Improving' : 'Building'}: ${m.data.name}`);
+      await world.build(message.data, `${old ? 'Improving' : 'Building'}: ${message.data.name}`);
       if (stale()) return;
       world.say('');
       break;
     }
     case 'task':
-      if (view.tasks.some((t) => t.id === m.data.id)) break;
-      view.tasks.push(m.data);
-      if (m.data.text === 'Every check passed') world.passed();
-      if (m.data.stage === shown && !picked) {
+      if (view.tasks.some((task) => task.id === message.data.id)) break;
+      view.tasks.push(message.data);
+      if (message.data.text === 'Every check passed') world.passed();
+      if (message.data.stage === shown && !picked) {
         renderPanel();
-        $('#panel').querySelector(`li[data-id="${CSS.escape(m.data.id)}"]`)?.classList.add('new');
+        $('#panel').querySelector(`li[data-id="${CSS.escape(message.data.id)}"]`)?.classList.add('new');
       }
       await wait(700);
       break;
     case 'ask':
-      view.ask = m.data;
+      view.ask = message.data;
       sound.ask();
       renderAsk();
       break;
     case 'answered':
-      if (view.ask?.id === m.id) view.ask = null;
+      if (view.ask?.id === message.id) view.ask = null;
       renderAsk();
       break;
     case 'finished':
-      view.finished = m.data;
+      view.finished = message.data;
       view.running = false;
       view.ask = null;
-      if (m.data.ok) {
+      if (message.data.ok) {
         view.stage = 'done';
         if (!view.visited.includes('done')) view.visited.push('done');
         sound.finish();
@@ -332,17 +420,28 @@ async function apply(m: StoryMsg, stale: () => boolean) {
       break;
     case 'problem':
       sound.problem();
-      toast(m.text);
+      toast(message.text);
+      break;
+    case 'guide':
+      view.guides = { ...(view.guides ?? {}), [message.stage]: message.text };
+      if (shown === message.stage || picked?.stage === message.stage) renderPanel();
+      break;
+    case 'note':
+      if (view.notes.at(-1) === message.text) break;
+      view.notes = [...(view.notes ?? []), message.text];
+      if (!picked) renderPanel();
+      break;
+    case 'agent':
+      view.agent = message.agent;
+      renderTop();
       break;
   }
 }
 
-// ---------------------------------------------------------------- where the story comes from
-
 feed = live(
-  (m) => {
-    if (m.type === 'state') lastLive = m.data;
-    if (source === 'live') push(m);
+  (message) => {
+    if (message.type === 'state') lastLive = message.data;
+    if (source === 'live') push(message);
   },
   (up) => {
     online = up;
@@ -350,101 +449,204 @@ feed = live(
   },
 );
 
-/** The one chat box: the brain decides whether this is a question or something to build. */
-async function send(text: string): Promise<MessageReply> {
+function chosenAgent(): AgentId {
+  const value = document.querySelector<HTMLInputElement>('input[name="agent"]:checked')?.value;
+  return value === 'cursor' || value === 'codex' || value === 'claude' ? value : 'claude';
+}
+
+async function send(text: string, extra?: { folder?: string; agent?: string }): Promise<MessageReply> {
   try {
-    const res = await fetch('/api/message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+    const res = await fetch('/api/message', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, folder: extra?.folder ?? '', agent: extra?.agent }),
+    });
     return await res.json();
   } catch {
-    return { ok: false, error: 'Could not reach the builder. Is Buildscape still running in your terminal?' };
+    return { ok: false, error: 'Could not reach the builder. Is Vibeerr still running in your terminal?' };
   }
 }
 
 async function startDemo() {
   source = 'demo';
-  try {
-    demoFeed = await demo(push);
-  } catch {
+  try { demoFeed = await demo(push); } catch {
     source = 'live';
     $('#start-note').textContent = 'The demo could not be loaded.';
   }
 }
 
-function goHome() {
+function goHome(force = false) {
   demoFeed?.close();
   demoFeed = null;
   source = 'live';
   queue.length = 0;
   epoch++;
   view = null;
-  // If the brain is in the middle of a build (started before the demo), go back to watching it.
-  if (lastLive?.running) push({ type: 'state', data: lastLive }); else showStart();
+  sideAnswers = [];
+  renderChat();
+  if (!force && lastLive?.idea && (lastLive.running || lastLive.finished)) push({ type: 'state', data: normalize(lastLive) });
+  else showStart();
 }
 
-// ---------------------------------------------------------------- clicks and typing
+function planFromAsk(): { plan?: PlanSection[]; summary?: string } {
+  const sections = [...$('#ask').querySelectorAll<HTMLElement>('.psec')].map((section) => ({
+    title: section.querySelector('h3')?.textContent?.trim() ?? '',
+    items: [...section.querySelectorAll<HTMLTextAreaElement>('textarea')].map((box) => box.value.trim()).filter(Boolean),
+  })).filter((section) => section.title && section.items.length);
+  const summary = $('#ask').querySelector<HTMLTextAreaElement>('#plan-summary')?.value.trim();
+  return { plan: sections.length ? sections : undefined, summary };
+}
 
-$('#idea-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
+$('#idea-form').addEventListener('submit', async (event) => {
+  event.preventDefault();
   const box = $<HTMLTextAreaElement>('#idea');
   const text = box.value.trim();
   if (text.length < 3) return;
-  sound.task(); // also unlocks sound in the browser
+  sound.task();
   const go = $<HTMLButtonElement>('#go');
   go.disabled = true;
   $('#start-note').textContent = 'Thinking about what you mean...';
-  const out = await send(text);
+  const out = await send(text, { folder: $<HTMLInputElement>('#folder').value.trim(), agent: chosenAgent() });
   go.disabled = !online;
   $('#start-note').textContent = out.ok ? '' : out.error;
-  if (out.ok && out.route === 'answer') {
-    $('#answers').insertAdjacentHTML('afterbegin', answerCard(text, out.answer));
+  if (!out.ok) return;
+  if (out.route === 'answer') {
+    sideAnswers.unshift({ q: text, a: out.answer });
+    renderChat();
     box.value = '';
+    grow(box);
   }
 });
-$('#idea').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) $<HTMLFormElement>('#idea-form').requestSubmit();
+$('#idea').addEventListener('input', () => grow($<HTMLTextAreaElement>('#idea')));
+$('#dock-text').addEventListener('input', () => grow($<HTMLTextAreaElement>('#dock-text')));
+$('#idea').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) $<HTMLFormElement>('#idea-form').requestSubmit();
 });
-document.querySelectorAll<HTMLButtonElement>('.chip').forEach((c) => c.addEventListener('click', () => {
+$('#folder-suggest').addEventListener('click', () => {
+  const box = $<HTMLInputElement>('#folder');
+  box.value = suggestedFolder || '~/Vibeerr/my-project';
+  box.focus();
+});
+$('#folder-pick').addEventListener('click', async () => {
+  const button = $<HTMLButtonElement>('#folder-pick');
+  const note = $('#folder-note');
+  button.disabled = true;
+  note.classList.remove('warn');
+  note.textContent = 'Opening your folders…';
+  try {
+    const res = await fetch('/api/pick-folder', { method: 'POST' });
+    const out = await res.json();
+    if (out.ok && typeof out.folder === 'string') {
+      $<HTMLInputElement>('#folder').value = out.folder;
+      note.textContent = 'This is where the app will live.';
+    } else {
+      note.textContent = out.error || 'No folder was chosen.';
+      note.classList.add('warn');
+    }
+  } catch {
+    note.textContent = 'The folder window could not open. Type the folder path instead.';
+    note.classList.add('warn');
+  }
+  button.disabled = false;
+});
+document.querySelectorAll<HTMLButtonElement>('.chip').forEach((chip) => chip.addEventListener('click', () => {
   const box = $<HTMLTextAreaElement>('#idea');
-  box.value = c.textContent ?? '';
+  box.value = chip.textContent ?? '';
+  grow(box);
   box.focus();
 }));
 $('#demo-btn').addEventListener('click', () => { sound.task(); void startDemo(); });
 $('#sound-btn').addEventListener('click', () => { sound.toggle(); renderTop(); });
 $('#stop-btn').addEventListener('click', () => void fetch('/api/stop', { method: 'POST' }));
-$('#home-btn').addEventListener('click', goHome);
-
-$('#stepper').addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.step');
-  if (btn && !btn.disabled) { open(btn.dataset.stage as StageId); world.focus(shown); }
-});
-
-$('#ask').addEventListener('click', (e) => {
-  const btn = (e.target as HTMLElement).closest<HTMLButtonElement>('.opt');
-  const id = view?.ask?.id;
-  if (!btn || !id) return;
-  (source === 'demo' ? demoFeed : feed)?.answer(id, Number(btn.dataset.opt));
-  btn.closest('.ask-card')?.classList.add('sent');
-});
-
-$('#panel').addEventListener('click', (e) => {
-  const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
-  if (act === 'home') goHome();
-  if (act === 'back') { picked = null; renderPanel(); }
-});
-$('#panel').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const box = $<HTMLTextAreaElement>('#change');
-  const text = box.value.trim();
-  if (text.length < 3) return;
-  const btn = (e.target as HTMLElement).querySelector('button');
-  if (btn) btn.disabled = true;
-  const out = await send(text);
-  if (btn) btn.disabled = false;
-  if (!out.ok) toast(out.error);
-  else if (out.route === 'answer') {
-    document.querySelector('#panel-answers')?.insertAdjacentHTML('afterbegin', answerCard(text, out.answer));
-    box.value = '';
+$('#reset-btn').addEventListener('click', () => void startOver());
+$<HTMLSelectElement>('#agent-live').addEventListener('change', async (event) => {
+  const select = event.target as HTMLSelectElement;
+  if (source === 'demo') return;
+  try {
+    const res = await fetch('/api/switch', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ agent: select.value }) });
+    const out = await res.json();
+    if (!out.ok) {
+      toast(out.error || 'That AI could not take over.');
+      if (view?.agent) select.value = view.agent;
+    }
+  } catch {
+    toast('Could not reach the builder.');
+    if (view?.agent) select.value = view.agent;
   }
 });
 
+$('#stepper').addEventListener('click', (event) => {
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.step');
+  if (button && !button.disabled) { open(button.dataset.stage as StageId); world.focus(shown); }
+});
+
+$('#ask').addEventListener('click', (event) => {
+  const add = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-add]');
+  if (add) {
+    const lines = add.parentElement?.querySelector('.lines');
+    lines?.insertAdjacentHTML('beforeend', '<textarea class="plan-edit"></textarea>');
+    lines?.querySelector<HTMLTextAreaElement>('textarea:last-of-type')?.focus();
+    return;
+  }
+  const button = (event.target as HTMLElement).closest<HTMLButtonElement>('.opt');
+  const id = view?.ask?.id;
+  if (!button || !id) return;
+  const edited = planFromAsk();
+  (source === 'demo' ? demoFeed : feed)?.answer(id, Number(button.dataset.opt), edited.plan, edited.summary);
+  button.closest('.ask-card')?.classList.add('sent');
+});
+
+$('#panel').addEventListener('click', (event) => {
+  const act = (event.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+  if (act === 'reset') void startOver();
+  if (act === 'back') { picked = null; renderPanel(); }
+});
+
+$('#dock').addEventListener('submit', async (event) => {
+  event.preventDefault();
+  const box = $<HTMLTextAreaElement>('#dock-text');
+  const text = box.value.trim();
+  if (text.length < 3) return;
+  const button = (event.target as HTMLFormElement).querySelector('button');
+  if (button) button.disabled = true;
+  const out = await send(text, { folder: view?.folder, agent: $<HTMLSelectElement>('#agent-live').value });
+  if (button) button.disabled = false;
+  if (!out.ok) { toast(out.error); return; }
+  box.value = '';
+  grow(box);
+  if (out.route === 'note' || out.route === 'answer') {
+    if (out.route === 'note' && view && view.notes.at(-1) !== text) {
+      view.notes = [...(view.notes ?? []), text];
+      if (!picked) renderPanel();
+    }
+    sideAnswers.unshift({ q: text, a: out.route === 'answer' ? out.answer : ['The builder will read this on the next step.'] });
+    renderChat();
+    if (out.route === 'note') toast('Sent. The builder reads it on the next step.');
+  }
+});
+
+async function startOver() {
+  if (source === 'demo') { goHome(true); return; }
+  lastLive = null;
+  try { await fetch('/api/reset', { method: 'POST' }); } catch { /* the screen still goes home */ }
+  goHome(true);
+}
+
+async function loadReady() {
+  try {
+    const data = await (await fetch('/api/ready')).json();
+    suggestedFolder = typeof data.folder === 'string' ? data.folder : '';
+    for (const agent of data.agents ?? []) {
+      const line = document.querySelector<HTMLElement>(`[data-ready="${agent.id}"]`);
+      if (!line) continue;
+      line.textContent = agent.ready ? 'Ready on this computer' : agent.detail;
+      line.classList.toggle('ready', !!agent.ready);
+      line.classList.toggle('missing', !agent.ready);
+    }
+    const first = (data.agents ?? []).find((agent: { ready?: boolean; id?: string }) => agent.ready)?.id ?? 'claude';
+    const radio = document.querySelector<HTMLInputElement>(`input[name="agent"][value="${first}"]`);
+    if (radio) radio.checked = true;
+  } catch { /* the demo still works offline */ }
+}
+
 showStart();
+void loadReady();

@@ -1,33 +1,34 @@
-# AGENTS.md: Buildscape shared context
+# AGENTS.md: Vibeerr shared context
 
 > Read this before writing code. It is the source of truth for every AI model working on this repo
 > (Claude Code, Codex, Cursor). `CLAUDE.md` only contains `@AGENTS.md`.
 
 ## What we are building
 
-**Buildscape** is a friendly wrapper around an AI coding agent for people who do not code.
-The person types an idea. The brain starts Claude Code for them. A guide AI sits between the agent and
-the person and turns raw agent activity into plain words. The person never sees code, file names or
-commands. They see the build as a **building site**: one district per stage, every part of the app is a
-block in its district, and the builder walks between the blocks doing the work (style from our teammate's
-VibeWorld, github.com/DevBehruz/vibeerr). One chat box: a question gets a plain answer, an app idea starts a build.
+**Vibeerr** is a friendly wrapper around an AI coding agent for people who do not code.
+The person types an idea, picks a folder, and picks an AI they already have (Claude, Cursor, or Codex).
+The brain starts that AI. A guide sits between the agent and the person and turns raw activity into plain
+words. The person never sees code, file names, or commands. They see the build as a **building site**: one
+district per stage, every part of the app is a block in its district, and the builder walks between the
+blocks (style from our teammate's VibeWorld, github.com/DevBehruz/vibeerr). One chat box: a question gets a
+plain answer, an app idea starts a build, and a note during a build is saved for the builder.
 
 - **Event:** sunhacks 2026 at ASU. Devpost deadline **Sunday Nov 15, 2026, 11:00 AM MST**. Submit by 10:30. Code freeze 9:00.
 - **Judging:** originality, complexity, completeness, design.
-- **Keep it simple.** One agent (Claude Code), one theme (block site), seven stages. No extra themes or integrations.
-- **No paid APIs.** Claude Code runs on the user's own login. Gemini free tier is optional. Everything must work with no keys.
+- **Keep it simple.** One theme (block site), seven stages, and only an AI the person already has: Claude, Cursor, or Codex. No extra themes.
+- **No paid APIs.** Each builder runs on the user's own login. Gemini free tier is optional. Everything must work with no keys. A `VIBEERR.md` brief in the project folder is rewritten as the work changes so those AIs can take turns.
 
 ## The seven stages (`shared/story.ts`)
 
 | id | Site name | What it really is |
 | --- | --- | --- |
-| `plan` | Plan (desk) | The full plan in PLAN.md, shown as sections for approval |
-| `setup` | Toolbox | Project setup and tools |
-| `look` | Screens | The frontend |
-| `logic` | Rules | Logic, backend |
-| `memory` | Memory | Saving information (database) |
-| `check` | Checks | Tests |
-| `done` | Ready (gate) | Ready to use, with structure summary and developer handoff |
+| `plan` | Idea | A short plan the person can edit before anything is built |
+| `setup` | Start | Getting a folder ready |
+| `look` | Pages | What they see and tap |
+| `logic` | Actions | What happens when they use it |
+| `memory` | Saved | What is still there tomorrow |
+| `check` | Try out | Making sure it really works |
+| `done` | Done | Ready to use, with a plain summary and a developer handoff |
 
 ## Architecture
 
@@ -36,8 +37,9 @@ web/ (Vite + TS, SVG) <── WebSocket /ws: StoryMsg only ── brain/ (Node, 
                                                               ^── POST /hook/claude (PreToolUse, PostToolUse) ──┘
 ```
 
-- `brain/src/runner.ts` starts `claude -p <idea> --output-format stream-json` in `~/Buildscape/<slug>`, writes
-  `.claude/settings.json` hooks there, handles each hook call, and gates the build on plan approval.
+- `brain/src/runner.ts` starts the chosen AI in the folder the person picked. Claude uses hooks and can pause
+  for the edited plan. Cursor and Codex write `PLAN.md`, stop, and continue only after the person edits it.
+  Every change rewrites `VIBEERR.md` in that folder.
 - `brain/src/stages.ts` maps a raw step (file written, command run) to a stage. `null` means "no opinion".
 - `brain/src/translator.ts` is the guide: Gemini if `GEMINI_API_KEY` is set, built-in sentences otherwise or on any failure.
 - `brain/src/story.ts` batches raw steps every 3.5 s, emits `stage`, `now`, `task`, `block`, `ask`, `finished`, and records to `runs/`.

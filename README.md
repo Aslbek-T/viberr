@@ -1,21 +1,20 @@
-# Buildscape
+# Vibeerr
 
-**Ask a question or describe an app. Watch it get built block by block.** Buildscape is a friendly wrapper
-around an AI coding agent for people who do not code. One chat box: a question gets a plain answer; an app idea
-starts a build. The builder (Claude Code) first writes the full plan in everyday words for you to approve, then
-builds it on a site with one district per part of an app. Every part becomes a block, the builder walks
-between blocks doing the work, and the connections light up to teach how apps are put together. At the end you
-get a plain summary of how your app is built and a guide for any developer who joins later.
+**Describe an app. Watch it get built, in plain words.** Vibeerr is a friendly wrapper around an AI the person
+already has (Claude, Cursor, or Codex). One chat box: a question gets a plain answer; an app idea starts a
+build. The builder writes a short plan the person can edit, then builds it on a site with one district per part
+of an app. A guide explains each part. Notes can be sent while it works. At the end there is a plain summary
+and a guide for any developer who joins later. `VIBEERR.md` in the project folder lets a different AI continue.
 
 | District | What it really is |
 | --- | --- |
-| Plan | Understanding your idea and writing the full plan |
-| Toolbox | Setting up the project and its tools |
-| Screens | What people see and touch (frontend) |
-| Rules | What happens when you tap (logic) |
-| Memory | Saving information (database) |
-| Checks | Checking that everything works (tests) |
-| Ready | Your app is ready to open |
+| Idea | What you want, in words you can edit |
+| Start | Getting a folder ready |
+| Pages | What you see and tap |
+| Actions | What happens when you use it |
+| Saved | What is still there tomorrow |
+| Try out | Making sure it really works |
+| Done | Your app is ready to open |
 
 The block-site style comes from our teammate's VibeWorld prototype: https://github.com/DevBehruz/vibeerr
 
@@ -36,7 +35,7 @@ No Claude Code on this computer? Press **Watch a demo build**: it replays a real
 
 Optional: copy `.env.example` to `.env` and add a free `GEMINI_API_KEY` from
 https://aistudio.google.com/apikey. With the key, Gemini writes the explanations for your specific app.
-Without it, Buildscape uses built-in sentences and still works. The terminal prints which one is active.
+Without it, Vibeerr uses built-in sentences and still works. The terminal prints which one is active.
 
 For development with hot reload: `npm run dev`, then open http://localhost:5173.
 
@@ -45,7 +44,7 @@ For development with hot reload: `npm run dev`, then open http://localhost:5173.
 ```
 You type an idea
       |
-brain/ (Node, port 4321) ── starts ──> Claude Code (headless, in ~/Buildscape/<your-app>)
+brain/ (Node, port 4321) ── starts ──> Claude, Cursor, or Codex (in the folder you picked)
       |   ^                                 |
       |   └──── hooks: every step, before it happens ─┘
       |

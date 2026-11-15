@@ -13,12 +13,12 @@ const env = (name: string) => process.env[name]?.trim() || undefined;
 export const PORT = Number(env('PORT') ?? 4321);
 // Only this computer can reach the brain: it can start a coding agent, so it must never be public.
 export const HOST = '127.0.0.1';
-// Projects are built outside this repo so Claude Code doesn't read our own AGENTS.md as instructions.
-export const PROJECTS_DIR = env('BUILDSCAPE_PROJECTS_DIR') ?? path.join(os.homedir(), 'Buildscape');
+// Projects are built outside this repo so a coding agent doesn't read our own AGENTS.md as instructions.
+export const PROJECTS_DIR = env('VIBEERR_PROJECTS_DIR') ?? env('BUILDSCAPE_PROJECTS_DIR') ?? path.join(os.homedir(), 'Vibeerr');
 export const RUNS_DIR = path.join(ROOT, 'runs');
 export const GEMINI_API_KEY = env('GEMINI_API_KEY') ?? '';
 export const GEMINI_MODEL = env('GEMINI_MODEL') ?? '';
-export const CLAUDE_BIN = env('BUILDSCAPE_CLAUDE_BIN') ?? 'claude';
-export const CLAUDE_MODEL = env('BUILDSCAPE_CLAUDE_MODEL') ?? '';
+export const CLAUDE_BIN = env('VIBEERR_CLAUDE_BIN') ?? env('BUILDSCAPE_CLAUDE_BIN') ?? 'claude';
+export const CLAUDE_MODEL = env('VIBEERR_CLAUDE_MODEL') ?? env('BUILDSCAPE_CLAUDE_MODEL') ?? '';
 /** How long the builder waits for the user's answer before giving up on that step. */
 export const ASK_TIMEOUT_MS = 9 * 60_000;

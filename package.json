@@ -1,8 +1,8 @@
 {
-  "name": "buildscape",
+  "name": "vibeerr",
   "private": true,
   "version": "0.1.0",
-  "description": "Watch, understand and steer your AI coding agent as characters in a building.",
+  "description": "Describe an app in plain words and watch an AI you already have build it.",
   "type": "module",
   "workspaces": [
     "brain",

@@ -1,7 +1,7 @@
-import type { ClientMsg, RecordedLine, StoryMsg } from '../../shared/story.ts';
+import type { ClientMsg, PlanSection, RecordedLine, StoryMsg } from '../../shared/story.ts';
 
 /** Where the story comes from: the brain on this computer, or the recorded demo. */
-export interface Feed { answer(id: string, option: number): void; close(): void }
+export interface Feed { answer(id: string, option: number, plan?: PlanSection[], summary?: string): void; close(): void }
 
 /** Live connection to the brain. Reconnects by itself. */
 export function live(onMsg: (m: StoryMsg) => void, onStatus: (online: boolean) => void): Feed {
@@ -16,7 +16,7 @@ export function live(onMsg: (m: StoryMsg) => void, onStatus: (online: boolean) =
   };
   open();
   return {
-    answer(id, option) { ws?.send(JSON.stringify({ type: 'answer', id, option } satisfies ClientMsg)); },
+    answer(id, option, plan, summary) { ws?.send(JSON.stringify({ type: 'answer', id, option, plan, summary } satisfies ClientMsg)); },
     close() { closed = true; ws?.close(); },
   };
 }

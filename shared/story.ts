@@ -14,24 +14,25 @@ export interface StageInfo {
 }
 
 /**
- * The stages every vibe-coded project goes through. On screen the app is a building site:
+ * The stages every project goes through. On screen the app is a building site:
  * each of the five middle stages is a district, and every part the builder makes is a block in it.
+ * Names stay in everyday words. A technical term appears only inside the lesson, with its meaning.
  */
 export const STAGES: StageInfo[] = [
-  { id: 'plan', name: 'Plan', real: 'Understanding your idea and planning it', color: '#9fc3e8',
-    lesson: 'Every app starts as a plan: what people can do, which screens they see, and what it must remember. A clear plan is what AI builders like Claude Code, Codex and Cursor write first too.' },
-  { id: 'setup', name: 'Toolbox', real: 'Setting up the project and its tools', color: '#c9b48a',
-    lesson: 'Before building, a project gets a name, a folder and a toolbox. Developers call this "setup". It often lists ready-made parts other people already built.' },
-  { id: 'look', name: 'Screens', real: 'What people see and touch', color: '#73cfab',
-    lesson: 'The pages, buttons and colors you can see are called the "frontend". It only shows things and passes your taps on to the rules.' },
-  { id: 'logic', name: 'Rules', real: 'What happens when you tap something', color: '#a89ae8',
-    lesson: 'Behind every button is a rule: "when someone taps Add, put the item on the list". Developers call this the "logic" (on a server it is the "backend").' },
-  { id: 'memory', name: 'Memory', real: 'Saving information so it is still there tomorrow', color: '#efbc6d',
-    lesson: 'Apps keep information in a store so it survives closing the page. A bigger app uses a "database" for this. The rules save into it and load from it.' },
-  { id: 'check', name: 'Checks', real: 'Making sure everything really works', color: '#e98f8f',
-    lesson: 'Small automatic checks, called "tests", try the rules again after every change, so a new fix never quietly breaks something old.' },
-  { id: 'done', name: 'Ready', real: 'Your app is ready to use', color: '#b9d897',
-    lesson: 'An app is never truly finished. Ask for a change any time and the builder goes through the same districts again, only faster.' },
+  { id: 'plan', name: 'Idea', real: 'What you want the app to do', color: '#9fc3e8',
+    lesson: 'This is the plan, before anything is built. It says what you can do, what you will see, and what the app keeps. Change the words until they match the work you actually want.' },
+  { id: 'setup', name: 'Start', real: 'Getting a folder ready', color: '#c9b48a',
+    lesson: 'This step only prepares a folder and the tools. You will not see it in the finished app. Think of it as clearing a desk before an experiment.' },
+  { id: 'look', name: 'Pages', real: 'What you see and tap', color: '#73cfab',
+    lesson: 'These are the pages, buttons, and colors. People sometimes call this the “frontend”, which only means the side you can see. Your taps start here.' },
+  { id: 'logic', name: 'Actions', real: 'What happens when you use it', color: '#a89ae8',
+    lesson: 'Each button needs one clear result, such as “Add puts this on the list”. People sometimes call the hidden part the “backend”. It is just the actions you cannot see.' },
+  { id: 'memory', name: 'Saved', real: 'What is still there tomorrow', color: '#efbc6d',
+    lesson: 'This is the information the app keeps after you close it. A larger store of information is called a “database”. The actions save into it and read it back.' },
+  { id: 'check', name: 'Try out', real: 'Making sure it really works', color: '#e98f8f',
+    lesson: 'The builder tries the important actions with example information. People call these automatic tries “tests”. They catch a break before you do.' },
+  { id: 'done', name: 'Done', real: 'Ready for you to use', color: '#b9d897',
+    lesson: 'You can open the app, send a note, or ask what any part means. A later change walks through the same parts again.' },
 ];
 
 export const stageInfo = (id: StageId) => STAGES.find((s) => s.id === id)!;
@@ -48,10 +49,22 @@ export interface Ask {
   question: string;
   summary?: string;                           // one sentence above the details
   details?: string[];                         // short friendly bullets
-  sections?: PlanSection[];                   // the full plan, in plain words
+  sections?: PlanSection[];                   // the plan, in plain words
+  editable?: boolean;                         // the person can change the lines before saying yes
   options: { label: string; explain: string }[];
   recommended?: number;
 }
+
+/** An AI the person already has on this computer. Vibeerr does not add a new account. */
+export type AgentId = 'claude' | 'cursor' | 'codex';
+
+export const AGENTS: { id: AgentId; label: string; blurb: string }[] = [
+  { id: 'claude', label: 'Claude', blurb: 'Claude Code, already signed in on this computer' },
+  { id: 'cursor', label: 'Cursor', blurb: 'The Cursor agent, already installed on this computer' },
+  { id: 'codex', label: 'Codex', blurb: 'Codex, already installed on this computer' },
+];
+
+export const isAgentId = (v: unknown): v is AgentId => v === 'claude' || v === 'cursor' || v === 'codex';
 
 export interface Finished {
   ok: boolean;
@@ -75,6 +88,13 @@ export interface RunState {
   ask: Ask | null;
   finished: Finished | null;
   narrator: 'gemini' | 'template';
+  /** A short note from the guide for each part, written for this project. */
+  guides: Partial<Record<StageId, string>>;
+  /** Recommendations the person sent while the builder was working. */
+  notes: string[];
+  agent: AgentId;
+  /** The folder this project lives in. */
+  folder: string;
 }
 
 // Brain -> browser
@@ -87,10 +107,13 @@ export type StoryMsg =
   | { type: 'ask'; data: Ask }
   | { type: 'answered'; id: string; option: number | null }
   | { type: 'finished'; data: Finished }
-  | { type: 'problem'; text: string };
+  | { type: 'problem'; text: string }
+  | { type: 'guide'; stage: StageId; text: string }
+  | { type: 'note'; text: string }
+  | { type: 'agent'; agent: AgentId };
 
 // Browser -> brain
-export type ClientMsg = { type: 'answer'; id: string; option: number };
+export type ClientMsg = { type: 'answer'; id: string; option: number; plan?: PlanSection[]; summary?: string };
 
 /**
  * Answer to POST /api/message. The brain decides what the person meant:
@@ -98,7 +121,7 @@ export type ClientMsg = { type: 'answer'; id: string; option: number };
  */
 export type MessageReply =
   | { ok: true; route: 'answer'; answer: string[] }
-  | { ok: true; route: 'build' | 'change' }
+  | { ok: true; route: 'build' | 'change' | 'note' }
   | { ok: false; error: string };
 
 /** One line of a recorded run (web/public/demo.jsonl). `t` is ms since the run started. */
