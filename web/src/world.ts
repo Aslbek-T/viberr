@@ -302,10 +302,70 @@ export class World {
     this.svg.classList.add('finished');
     this.say('Your app is ready!');
     if (reduced()) return;
-    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-    const colors = ['#73cfab', '#a89ae8', '#efbc6d', '#e98f8f', '#f4c858'];
-    g.innerHTML = Array.from({ length: 40 }, (_, i) => `<rect class="confetti" style="--i:${i}" x="${(i * 97) % W}" y="-20" width="7" height="12" fill="${colors[i % 5]}"/>`).join('');
+    this.confetti();
+  }
+
+  /**
+   * Two confetti cannons fire from the bottom corners. Each piece has its own speed, spin and flutter:
+   * it shoots up, slows in the air, tumbles (the flat side catches the light), drifts and falls, then fades.
+   */
+  private confetti() {
+    const NS = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('aria-hidden', 'true');
+    const colors = ['#73cfab', '#a89ae8', '#efbc6d', '#e98f8f', '#f4c858', '#9fc3e8', '#f0f0db'];
+    const rand = (a: number, b: number) => a + Math.random() * (b - a);
+    type Bit = { el: SVGElement; x: number; y: number; vx: number; vy: number; rot: number; vr: number; flip: number; vf: number; sway: number; phase: number; size: number; life: number };
+    const bits: Bit[] = [];
+    const fire = (fromX: number, dir: 1 | -1, count: number, delay: number) => {
+      for (let i = 0; i < count; i++) {
+        const shape = Math.random();
+        const size = rand(6, 11);
+        const el = document.createElementNS(NS, shape < 0.6 ? 'rect' : shape < 0.85 ? 'circle' : 'path') as SVGElement;
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        if (shape < 0.6) { el.setAttribute('x', String(-size / 2)); el.setAttribute('y', String(-size * 0.3)); el.setAttribute('width', String(size)); el.setAttribute('height', String(size * 0.6)); el.setAttribute('rx', '1.2'); }
+        else if (shape < 0.85) el.setAttribute('r', String(size * 0.32));
+        else { el.setAttribute('d', `M${-size} 0 q${size / 2} ${-size / 2} ${size} 0 t${size} 0`); el.setAttribute('fill', 'none'); el.setAttribute('stroke', color); el.setAttribute('stroke-width', '2.4'); el.setAttribute('stroke-linecap', 'round'); }
+        if (shape < 0.85) el.setAttribute('fill', color);
+        el.setAttribute('opacity', '0');
+        g.appendChild(el);
+        const angle = (dir === 1 ? rand(-80, -45) : rand(-135, -100)) * (Math.PI / 180);
+        const speed = rand(1150, 1650);
+        bits.push({ el, x: fromX, y: H + 10, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, rot: rand(0, 360), vr: rand(-540, 540),
+          flip: rand(0, Math.PI * 2), vf: rand(6, 14), sway: rand(30, 70), phase: rand(0, Math.PI * 2), size, life: -delay - rand(0, 0.12) });
+      }
+    };
+    fire(40, 1, 70, 0);
+    fire(W - 40, -1, 70, 0);
+    fire(W * 0.5, Math.random() < 0.5 ? 1 : -1, 40, 0.5); // a second, smaller pop from the middle
     this.fx.appendChild(g);
-    setTimeout(() => g.remove(), 4200);
+    const GRAVITY = 650, DRAG = 1.15, LIFE = 6.5;
+    let last = performance.now();
+    const step = (now: number) => {
+      const dt = Math.min((now - last) / 1000, 0.05);
+      last = now;
+      let alive = 0;
+      for (const b of bits) {
+        b.life += dt;
+        if (b.life < 0) { alive++; continue; }
+        if (b.life > LIFE) { b.el.remove(); continue; }
+        alive++;
+        // Air resistance slows the burst quickly; once falling, paper drifts down slowly and sways.
+        b.vx -= b.vx * DRAG * dt;
+        b.vy += GRAVITY * dt;
+        b.vy -= b.vy * DRAG * dt;
+        if (b.vy > b.size * 9) b.vy = b.size * 9; // paper falls slowly, bigger pieces a bit faster
+        b.x += b.vx * dt + Math.sin(b.life * 3 + b.phase) * b.sway * dt * (b.vy > 0 ? 1 : 0.2);
+        b.y += b.vy * dt;
+        b.rot += b.vr * dt;
+        b.flip += b.vf * dt;
+        const tumble = Math.cos(b.flip); // seeing the piece edge-on, then flat again
+        const fade = b.life > LIFE - 0.8 ? (LIFE - b.life) / 0.8 : Math.min(1, b.life * 8);
+        b.el.setAttribute('opacity', (fade * (tumble < 0 ? 0.72 : 1)).toFixed(2)); // the back side looks darker
+        b.el.setAttribute('transform', `translate(${b.x.toFixed(1)} ${b.y.toFixed(1)}) rotate(${b.rot.toFixed(0)}) scale(1 ${Math.max(0.08, Math.abs(tumble)).toFixed(2)})`);
+      }
+      if (alive) requestAnimationFrame(step); else g.remove();
+    };
+    requestAnimationFrame(step);
   }
 }
