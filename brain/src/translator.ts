@@ -1,4 +1,4 @@
-import { stageInfo, type StageId } from '../../shared/story.ts';
+import { stageInfo, type PlanSection, type StageId } from '../../shared/story.ts';
 import { GEMINI_API_KEY, GEMINI_MODEL } from './config.ts';
 import { humanName, type Raw } from './stages.ts';
 
@@ -10,16 +10,16 @@ import { humanName, type Raw } from './stages.ts';
 export const narratorKind = (): 'gemini' | 'template' => (GEMINI_API_KEY ? 'gemini' : 'template');
 
 const GUIDE = `You are the friendly guide inside Buildscape, an app that lets people with NO coding background
-watch an AI builder make their app. The build is shown as building a house in stages:
-Blueprint (planning), Foundation (project setup), Walls and windows (the screens people see),
-Wiring (the rules that make it work), Storage room (saving information), Inspection (checking it works),
-Move-in day (ready).
+watch an AI builder (Claude Code) make their app. The build is shown as a building site where every part of
+the app is a block in a district: Plan, Toolbox (project setup), Screens (what people see, the "frontend"),
+Rules (what happens when you tap, the "logic"), Memory (saving information, the "database"),
+Checks (automatic "tests"), Ready.
 
 You receive the builder's raw technical activity. Rewrite it for the person. Rules:
 - NEVER mention file names, code, commands, programming languages, libraries or tools by name.
 - No jargon. If a real term helps them learn (frontend, database, test), explain it in the same sentence.
 - Talk about THEIR app and what it will let them do. Be concrete, warm and brief. No emojis. No hype.
-- Use the house picture lightly, at most once per sentence.`;
+- Help them learn how apps are structured: which part does what, and how the parts talk to each other.`;
 
 // Model ids change often, so we try a short list and keep the first one that answers.
 // Set GEMINI_MODEL in .env to force one.
@@ -94,46 +94,95 @@ function describe(items: Raw[]): string {
   }).join('\n');
 }
 
-export interface StepWords { now: string; tasks: string[] }
+export interface BlockWords { file: string; name: string; does: string }
+export interface StepWords { now: string; tasks: string[]; blocks: BlockWords[] }
 
 /** Words for one batch of activity in one stage. */
 export async function translateStep(idea: string, stage: StageId, items: Raw[], doneSoFar: string[]): Promise<StepWords> {
   const fallback = templateStep(stage, items);
   const s = stageInfo(stage);
+  const files = uniq(items.filter((r) => r.kind === 'write' && r.file).map((r) => r.file!));
   const out = await gemini(`The person asked for: "${idea}"
-Current stage: ${s.house} (${s.real}).
+Current district: ${s.name} (${s.real}).
 Already told them: ${doneSoFar.slice(-6).join('; ') || 'nothing yet'}
 
 Raw activity:
 ${describe(items)}
 
-Reply with JSON: {"now": string, "tasks": string[]}
+Reply with JSON: {"now": string, "tasks": string[], "blocks": [{"file": string, "name": string, "does": string}]}
 "now": one sentence (max 24 words), present tense, saying what the builder is doing right now and why it matters for their app.
-"tasks": 1 to 3 finished to-do items (max 9 words each), past tense, specific to their app, e.g. "Added the button to save a new plant". Do not repeat what they were already told. Use [] if nothing new was finished.`);
+"tasks": 1 to 3 finished to-do items (max 9 words each), past tense, specific to their app, e.g. "Added the button to save a new plant". Do not repeat what they were already told. Use [] if nothing new was finished.
+"blocks": one entry for each of these written files: ${files.length ? files.join(', ') : '(none, use [])'}.
+  "file" is the file exactly as given (it is never shown). "name" is 2 or 3 everyday words for that part of the app, like "Main screen", "Colors and layout", "Point rules", "Memory box". "does" is one sentence (max 20 words) on what that part does for their app and which other part it works with.`);
   if (!out) return fallback;
   const tasks = Array.isArray(out.tasks) ? out.tasks.map((t: unknown) => clean(t, 90)).filter(Boolean).slice(0, 3) : [];
-  return { now: clean(out.now, 220) || fallback.now, tasks: tasks.length ? tasks : fallback.tasks };
+  const blocks: BlockWords[] = fallback.blocks.map((b) => {
+    const g = Array.isArray(out.blocks) ? out.blocks.find((x: any) => x?.file === b.file) : null;
+    const name = clean(g?.name, 32).replace(/\.[a-z]{1,5}\b/gi, '');
+    return { file: b.file, name: name || b.name, does: clean(g?.does, 200) || b.does };
+  });
+  return { now: clean(out.now, 220) || fallback.now, tasks: tasks.length ? tasks : fallback.tasks, blocks };
 }
 
-/** Turns the builder's plan into a few friendly bullets for the "go ahead?" card. */
-export async function translatePlan(idea: string, planText: string): Promise<string[]> {
-  const fallback = planText.split('\n').map((l) => l.replace(/^[\s#>*\-\d.)]+/, '').replace(/[`*_]/g, '').trim())
-    .filter((l) => l.length > 3).slice(1, 6).map((l) => l.slice(0, 140));
+// ---------------------------------------------------------------- the plan
+
+/** The headings the builder is asked to use in PLAN.md (see RULES in runner.ts). */
+export const PLAN_HEADINGS = [
+  'What you will be able to do',
+  'The screens',
+  'What happens when you tap',
+  'What it remembers',
+  'How I will check it works',
+  'The parts I will build',
+];
+
+export interface PlanWords { title: string; summary: string; sections: PlanSection[] }
+
+/** Reads PLAN.md as written: a title, a summary line, then "## heading" sections of bullets. */
+export function parsePlan(planText: string): PlanWords {
+  const lines = planText.split('\n');
+  let title = '';
+  const intro: string[] = [];
+  const sections: PlanSection[] = [];
+  const strip = (l: string) => l.replace(/^[\s>*\-\d.)]+/, '').replace(/[`*_]/g, '').trim();
+  for (const line of lines) {
+    if (/^#\s/.test(line)) { title ||= strip(line.replace(/^#\s*/, '')); continue; }
+    if (/^#{2,}\s/.test(line)) { sections.push({ title: strip(line.replace(/^#+\s*/, '')), items: [] }); continue; }
+    const t = strip(line);
+    if (t.length < 3) continue;
+    if (sections.length) sections.at(-1)!.items.push(t.slice(0, 220));
+    else intro.push(t);
+  }
+  const kept = sections.filter((s) => s.items.length).map((s) => ({ ...s, items: s.items.slice(0, 8) }));
+  if (!kept.length && intro.length > 1) kept.push({ title: 'What you will be able to do', items: intro.slice(1, 7) });
+  return { title, summary: intro[0] ?? '', sections: kept.slice(0, 7) };
+}
+
+/** The full plan for the "go ahead?" card: every section the builder wrote, in plain words. */
+export async function translatePlan(idea: string, planText: string): Promise<PlanWords> {
+  const parsed = parsePlan(planText);
+  const fallback: PlanWords = parsed.sections.length ? parsed
+    : { title: '', summary: '', sections: [{ title: 'What you will be able to do', items: ['Build the first simple version of your idea.'] }] };
   const out = await gemini(`The person asked for: "${idea}"
 The builder wrote this plan:
-${planText.slice(0, 1500)}
+${planText.slice(0, 4000)}
 
-Reply with JSON: {"bullets": string[]}
-3 to 5 bullets, each max 14 words, each saying one thing the app will let the person do, in everyday words.`);
-  const bullets = Array.isArray(out?.bullets) ? out.bullets.map((b: unknown) => clean(b, 140)).filter(Boolean).slice(0, 5) : [];
-  return bullets.length ? bullets : fallback.length ? fallback : ['Build the first simple version of your idea.'];
+Rewrite it for the person, keeping EVERY detail and the same sections, but in everyday words a non-coder understands.
+Replace any technical word with a plain one, or explain it in the same bullet. Never mention file names or code.
+Reply with JSON: {"summary": string, "sections": [{"title": string, "items": string[]}]}
+"summary": one sentence on what the app is. Each item max 25 words.`, 12000);
+  const sections: PlanSection[] = Array.isArray(out?.sections)
+    ? out.sections.map((s: any) => ({ title: clean(s?.title, 60), items: Array.isArray(s?.items) ? s.items.map((i: unknown) => clean(i, 220)).filter(Boolean).slice(0, 8) : [] }))
+      .filter((s: PlanSection) => s.title && s.items.length).slice(0, 7)
+    : [];
+  return sections.length ? { title: parsed.title, summary: clean(out?.summary, 220) || parsed.summary, sections } : fallback;
 }
 
-/** The closing words on move-in day. */
+/** The closing words on the Ready screen. */
 export async function translateFinish(idea: string, resultText: string, tasks: string[], ok: boolean, change = false): Promise<string> {
   const fallback = !ok ? 'The builder stopped before finishing. You can ask it to continue or describe what you want changed.'
     : change ? 'Your change is in. Open your app to see it, and ask for another change any time.'
-    : `Your app is ready. The builder finished ${tasks.length} jobs, from the blueprint to the final inspection. Open it and try it out, then ask for any change you like.`;
+    : `Your app is ready. The builder finished ${tasks.length} jobs, from the plan to the final checks. Open it and try it out, then ask for any change you like.`;
   if (!ok) return fallback;
   const out = await gemini(`The person asked for: "${idea}"
 ${change ? 'They asked for a change to their existing app. ' : ''}The builder finished and reported: ${resultText.slice(0, 1200)}
@@ -144,34 +193,57 @@ Reply with JSON: {"summary": string}
   return clean(out?.summary, 500) || fallback;
 }
 
+/** Answers a plain question for someone who does not code. Null when Gemini is not available. */
+export async function answerWithGemini(question: string, context: string): Promise<string[] | null> {
+  const out = await gemini(`${context ? `They are working on this app: ${context}\n` : ''}The person asks: "${question}"
+
+Answer like a patient teacher talking to someone who has never coded. You MAY name real technical terms here,
+but explain each one in the same sentence. Use a small everyday comparison when it helps.
+Reply with JSON: {"answer": string[]} with 2 to 5 short paragraphs (max 60 words each).`, 15000);
+  const answer = Array.isArray(out?.answer) ? out.answer.map((a: unknown) => clean(a, 500)).filter(Boolean).slice(0, 6) : [];
+  return answer.length ? answer : null;
+}
+
+/** Decides what the person meant. Null when Gemini is not available or unsure. */
+export async function routeWithGemini(text: string, hasApp: boolean): Promise<'question' | 'build' | 'change' | null> {
+  const out = await gemini(`Someone typed this into Buildscape: "${text}"
+${hasApp ? 'They already have an app built in Buildscape.' : 'They have not built an app yet.'}
+Decide what they want:
+- "question": they want an explanation or advice (how something works, what a word means, what to build). Nothing should be built.
+- "build": they describe a NEW app, website, game or tool they want made.
+${hasApp ? '- "change": they want something added to, removed from or changed in their existing app.\n' : ''}Reply with JSON: {"route": "question" | "build"${hasApp ? ' | "change"' : ''}}`, 6000);
+  const r = out?.route;
+  return r === 'question' || r === 'build' || (hasApp && r === 'change') ? r : null;
+}
+
 // ---------------------------------------------------------------- built-in sentences (no key needed)
 
 const NOW: Record<StageId, string[]> = {
   plan: [
-    'Your builder is reading your idea and drawing the blueprint: a short list of what your app should do.',
-    'Before building anything, your builder is planning. A clear plan keeps the whole house standing.',
+    'Your builder is reading your idea and writing the plan: what you can do, which screens you see and what it remembers.',
+    'Before building anything, your builder is planning. A clear plan decides which blocks go in each district.',
   ],
   setup: [
-    'Your builder is laying the foundation: giving the project a home and a toolbox.',
-    'The foundation is going in. Nothing is visible yet, but everything else will stand on it.',
+    'Your builder is filling the toolbox: giving the project a name, a folder and its tools.',
+    'The toolbox is being set up. You will not see it, but every other block depends on it.',
   ],
   look: [
-    'The walls and windows are going up: these are the screens you will see and touch.',
+    'Your builder is placing blocks in the Screens district: the pages and buttons you will see and touch.',
     'Your builder is shaping what the app looks like. Developers call this part the "frontend".',
   ],
   logic: [
-    'Now the wiring: the rules that decide what happens when you tap a button.',
-    'Your builder is connecting the buttons to what they should do. You never see this part, but nothing works without it.',
+    'Now the Rules district: what should happen when you tap each button.',
+    'Your builder is connecting the buttons to what they should do. Screens pass your taps to these rules.',
   ],
   memory: [
-    'Your builder is fitting out the storage room, so the app remembers your information tomorrow.',
-    'The app is learning to remember things. The place where information is kept is called a "database".',
+    'Your builder is building the Memory district, so the app remembers your information tomorrow.',
+    'The app is learning to keep things. The rules save into this memory and load from it.',
   ],
   check: [
-    'Inspection time: your builder is running small automatic checks to make sure everything works.',
+    'Checks time: your builder is writing small automatic tests that try the rules with example information.',
     'Your builder is testing its own work, so a later change cannot quietly break something.',
   ],
-  done: ['Move-in day. Your app is ready.'],
+  done: ['Your app is ready.'],
 };
 
 // Friendly verbs for the names builders give to the small jobs inside an app.
@@ -243,5 +315,30 @@ function tasksFor(stage: StageId, r: Raw): string[] {
 let turn = 0;
 function templateStep(stage: StageId, items: Raw[]): StepWords {
   const now = NOW[stage][turn++ % NOW[stage].length];
-  return { now, tasks: uniq(items.flatMap((r) => tasksFor(stage, r))).slice(0, 4) };
+  const files = uniq(items.filter((r) => r.kind === 'write' && r.file).map((r) => r.file!));
+  return { now, tasks: uniq(items.flatMap((r) => tasksFor(stage, r))).slice(0, 4), blocks: files.map((f) => blockFor(stage, f)) };
+}
+
+/** A plain name and job for one part of the app, when no guide model is available. */
+export function blockFor(stage: StageId, file: string): BlockWords {
+  const base = (file.split('/').pop() ?? file).toLowerCase();
+  const known: [RegExp, string, string][] = [
+    [/^package\.json$/, 'Project card', 'Holds the app\'s name and how to run its checks. Every tool reads it first.'],
+    [/^index\.html?$/, 'Main screen', 'The page you see first: the headings, boxes and buttons. Your taps go from here to the rules.'],
+    [/\.(css|scss)$/, 'Colors and layout', 'Decides colors, sizes and spacing for every screen, including on a phone.'],
+    [/^(app|main|script|index)\.(js|ts|mjs)$/, 'Button rules', 'Decides what happens when you tap a button, and asks the memory box to save the result.'],
+    [/(storage|store|db|database|data)/, 'Memory box', 'Saves your information and loads it again next time, so nothing is lost when you close the page.'],
+    [/(test|spec)/, 'Automatic checks', 'Tries the rules with example information and shouts if any answer is wrong.'],
+    [/^readme/, 'Instructions', 'Explains what the app is and how to open it.'],
+    [/^project_guide/, 'Developer guide', 'A map of the app for any developer who joins later.'],
+  ];
+  for (const [re, name, does] of known) if (re.test(base)) return { file, name, does };
+  const words = humanName(file);
+  const name = words.charAt(0).toUpperCase() + words.slice(1);
+  const does: Record<StageId, string> = {
+    plan: 'Part of the plan.', setup: 'Part of the project\'s toolbox.', look: 'Part of what you see on screen.',
+    logic: 'One of the rules behind the buttons.', memory: 'Helps the app remember your information.',
+    check: 'An automatic check that the rules work.', done: 'Part of your app.',
+  };
+  return { file, name: name.slice(0, 32), does: does[stage] };
 }

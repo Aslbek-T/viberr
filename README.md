@@ -1,19 +1,23 @@
 # Buildscape
 
-**Describe an app. Watch it get built like a house.** Buildscape is a friendly wrapper around an AI coding
-agent for people who do not code. You type an idea, a builder (Claude Code) makes the app, and a guide AI
-turns everything the builder does into plain words. You never see code, file names or commands. You see
-one window per stage of the build, each with a small animated scene and the jobs that got done there.
+**Ask a question or describe an app. Watch it get built block by block.** Buildscape is a friendly wrapper
+around an AI coding agent for people who do not code. One chat box: a question gets a plain answer; an app idea
+starts a build. The builder (Claude Code) first writes the full plan in everyday words for you to approve, then
+builds it on a site with one district per part of an app. Every part becomes a block, the builder walks
+between blocks doing the work, and the connections light up to teach how apps are put together. At the end you
+get a plain summary of how your app is built and a guide for any developer who joins later.
 
-| Stage | What it really is |
+| District | What it really is |
 | --- | --- |
-| Blueprint | Understanding your idea and planning it |
-| Foundation | Setting up the project and its tools |
-| Walls and windows | The screens people see and touch (frontend) |
-| Wiring | The rules that make the app do things (logic) |
-| Storage room | Saving information (database) |
-| Inspection | Checking that everything works (tests) |
-| Move-in day | Your app is ready to open |
+| Plan | Understanding your idea and writing the full plan |
+| Toolbox | Setting up the project and its tools |
+| Screens | What people see and touch (frontend) |
+| Rules | What happens when you tap (logic) |
+| Memory | Saving information (database) |
+| Checks | Checking that everything works (tests) |
+| Ready | Your app is ready to open |
+
+The block-site style comes from our teammate's VibeWorld prototype: https://github.com/DevBehruz/vibeerr
 
 Built at sunhacks 2026.
 
@@ -27,7 +31,7 @@ npm install
 npm start
 ```
 
-Open http://localhost:4321, type what you want to build and press **Start building**.
+Open http://localhost:4321, type a question or what you want to build and press **Send**.
 No Claude Code on this computer? Press **Watch a demo build**: it replays a real recorded build.
 
 Optional: copy `.env.example` to `.env` and add a free `GEMINI_API_KEY` from
